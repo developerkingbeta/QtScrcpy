@@ -32,7 +32,7 @@ adb server version (41) doesn't match this client (39); killing...
 ## SMS auto-read
 
 - On **Redmi 220333QAG (MIUI/HyperOS V14, Android 13)** with USB debugging, `adb shell content query --uri content://sms/inbox --projection address:body:date --sort "date DESC"` **works** (no permission denial observed). WeChat codes in `[WeChat] (123456)` and `verification code (123456)` formats are parsed.
-- If `content query` fails on your ROM, the registrar falls back to **`dumpsys notification`**. If neither yields a code, automatic SMS read is unsupported on that ROM — register manually or use a device where inbox query works.
+- If `content query` fails on your ROM, the registrar may fall back to **`dumpsys notification` only after at least one SMS Resend** (avoids stale notification codes). If neither path yields a fresh code, automatic SMS read is unsupported on that ROM — register manually or use a device where inbox query works.
 
 ## UI automation (uiautomator) on MIUI / XSpace
 

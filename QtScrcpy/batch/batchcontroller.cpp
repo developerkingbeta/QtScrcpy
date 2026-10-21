@@ -349,15 +349,48 @@ void BatchController::onJobFinished(int rowIndex,
         row.wechat = WechatState::Unknown;
     }
 
-    if (!cancelled && row.reg == RegState::Registered) {
-        emit logLine(QStringLiteral("[REGISTERED] %1 %2").arg(row.serial(), row.phone));
-        RegistrationRecord record;
-        record.time = QDateTime::currentDateTimeUtc();
-        record.ip = row.ip;
-        record.phone = row.phone;
-        record.state = RegState::Registered;
-        record.detail = row.detail;
-        m_store.append(record);
+    if (kindValue == static_cast<int>(JobKind::Register)) {
+        const QString detailSuffix =
+            row.detail.isEmpty() ? QString() : QStringLiteral(" %1").arg(row.detail);
+        if (cancelled && row.reg == RegState::Cancelled) {
+            emit logLine(QStringLiteral("[CANCELLED] %1%2").arg(row.serial(), detailSuffix));
+        } else if (!cancelled) {
+            switch (row.reg) {
+            case RegState::Registered: {
+                emit logLine(QStringLiteral("[REGISTERED] %1 %2").arg(row.serial(), row.phone));
+                RegistrationRecord record;
+                record.time = QDateTime::currentDateTimeUtc();
+                record.ip = row.ip;
+                record.phone = row.phone;
+                record.state = RegState::Registered;
+                record.detail = row.detail;
+                m_store.append(record);
+                break;
+            }
+            case RegState::AlreadyRegistered: {
+                emit logLine(QStringLiteral("[ALREADY_REGISTERED] %1%2").arg(row.serial(), detailSuffix));
+                RegistrationRecord record;
+                record.time = QDateTime::currentDateTimeUtc();
+                record.ip = row.ip;
+                record.phone = row.phone;
+                record.state = RegState::AlreadyRegistered;
+                record.detail = row.detail;
+                m_store.append(record);
+                break;
+            }
+            case RegState::NeedsManual:
+                emit logLine(QStringLiteral("[NEEDS_MANUAL] %1%2").arg(row.serial(), detailSuffix));
+                break;
+            case RegState::Failed:
+                emit logLine(QStringLiteral("[FAILED] %1%2").arg(row.serial(), detailSuffix));
+                break;
+            case RegState::Cancelled:
+                emit logLine(QStringLiteral("[CANCELLED] %1%2").arg(row.serial(), detailSuffix));
+                break;
+            default:
+                break;
+            }
+        }
     }
 
     applyRowUpdate(rowIndex, row);

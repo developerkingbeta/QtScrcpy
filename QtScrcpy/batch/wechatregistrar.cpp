@@ -515,7 +515,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
             }
             if (!smsCodeTyped) {
                 QString code = SmsReader::extractWechatCode(driver.readSms(), notBeforeMs);
-                if (code.isEmpty()) {
+                if (code.isEmpty() && smsResendCount >= 1) {
                     code = SmsReader::extractCodeFromNotifications(driver.notificationDump());
                     if (!code.isEmpty() && driver.deviceNowMs() < notBeforeMs) {
                         code.clear();
