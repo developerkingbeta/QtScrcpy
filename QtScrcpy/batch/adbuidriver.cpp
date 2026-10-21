@@ -37,24 +37,42 @@ AdbUiDriver::AdbUiDriver(const QString &serial, const std::atomic<bool> *cancel)
 
 QList<UiNode> AdbUiDriver::dump()
 {
-    AdbRunner::run(m_serial,
-                   {QStringLiteral("shell"),
-                    QStringLiteral("uiautomator"),
-                    QStringLiteral("dump"),
-                    QString::fromUtf8(kUiDumpPath)},
-                   kShellTimeoutMs,
-                   m_cancel);
-    const AdbResult cat =
-        AdbRunner::run(m_serial,
-                       {QStringLiteral("exec-out"),
-                        QStringLiteral("cat"),
-                        QString::fromUtf8(kUiDumpPath)},
-                       kShellTimeoutMs,
-                       m_cancel);
-    if (!cat.ok()) {
-        return QList<UiNode>();
+    // Plain `uiautomator dump` often fails with "could not get idle state" on
+    // WeChat's animated Welcome splash (MIUI). `--compressed` still returns a
+    // usable hierarchy on that screen; fall back to plain dump if needed.
+    const QStringList attempts[] = {
+        {QStringLiteral("shell"),
+         QStringLiteral("uiautomator"),
+         QStringLiteral("dump"),
+         QStringLiteral("--compressed"),
+         QString::fromUtf8(kUiDumpPath)},
+        {QStringLiteral("shell"),
+         QStringLiteral("uiautomator"),
+         QStringLiteral("dump"),
+         QString::fromUtf8(kUiDumpPath)},
+    };
+
+    for (const QStringList &args : attempts) {
+        if (m_cancel && m_cancel->load()) {
+            return QList<UiNode>();
+        }
+        AdbRunner::run(m_serial, args, kShellTimeoutMs, m_cancel);
+        const AdbResult cat =
+            AdbRunner::run(m_serial,
+                           {QStringLiteral("exec-out"),
+                            QStringLiteral("cat"),
+                            QString::fromUtf8(kUiDumpPath)},
+                           kShellTimeoutMs,
+                           m_cancel);
+        if (!cat.ok() || cat.out.trimmed().isEmpty()) {
+            continue;
+        }
+        const QList<UiNode> nodes = UiDump::parse(cat.out);
+        if (!nodes.isEmpty()) {
+            return nodes;
+        }
     }
-    return UiDump::parse(cat.out);
+    return QList<UiNode>();
 }
 
 bool AdbUiDriver::tap(int x, int y)

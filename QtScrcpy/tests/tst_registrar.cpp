@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 
 #include "wechatregistrar.h"
@@ -16,6 +17,9 @@ public:
         , m_nowMs(1697881200000LL)
         , m_tapCount(0)
         , m_index(-1)
+        , m_advanceEverySleeps(0)
+        , m_sleepsSinceAdvance(0)
+        , m_tapNeedsAdvance(false)
     {
         QDir dir(flowDir);
         const QStringList entries = dir.entryList({QStringLiteral("*.xml")}, QDir::Files, QDir::Name);
@@ -27,28 +31,44 @@ public:
         }
     }
 
+    int screenCount() const { return m_screens.size(); }
+
     QList<batch::UiNode> dump() override
     {
+        // Apply a pending tap advance (button taps). Focus tap + typeText is
+        // coalesced in typeText so country search does not skip the result row.
+        if (m_tapNeedsAdvance) {
+            m_tapNeedsAdvance = false;
+            advance();
+        }
+        // Tiny fake-clock tick so step/sms/deadline budgets still expire if a
+        // path forgets to sleepMs (never wall-sleep here).
+        m_nowMs += 50;
         return batch::UiDump::parse(currentXml());
     }
 
     bool tap(int, int) override
     {
         ++m_tapCount;
-        advance();
+        m_tapNeedsAdvance = true;
         return true;
     }
 
     bool typeText(const QString &asciiText) override
     {
         m_typedTexts.append(asciiText);
+        // Focus tap + type = one screen change (not two).
+        m_tapNeedsAdvance = false;
         advance();
         return true;
     }
 
     bool pressBack() override
     {
-        advance();
+        // Production uses BACK to dismiss the IME after password. Fixtures have
+        // no IME layer — advancing here skips the Agree/Submit screens and
+        // lands on SMS before formSubmitted, causing step-timeout stalls.
+        m_tapNeedsAdvance = false;
         return true;
     }
 
@@ -64,7 +84,21 @@ public:
 
     qint64 deviceNowMs() override { return m_nowMs; }
 
-    void sleepMs(int ms) override { m_nowMs += ms; }
+    void sleepMs(int ms) override
+    {
+        // Instant: advance fake clock only — never QThread::msleep / wall wait.
+        if (ms > 0) {
+            m_nowMs += ms;
+        }
+        // Simulate a human completing an on-device puzzle while we poll.
+        if (m_advanceEverySleeps > 0) {
+            ++m_sleepsSinceAdvance;
+            if (m_sleepsSinceAdvance >= m_advanceEverySleeps) {
+                m_sleepsSinceAdvance = 0;
+                advance();
+            }
+        }
+    }
 
     bool cancelled() const override { return m_cancel.load(); }
 
@@ -79,6 +113,13 @@ public:
     QStringList typedTexts() const { return m_typedTexts; }
 
     void setNowMs(qint64 ms) { m_nowMs = ms; }
+
+    // Advance the fixture screen every N sleepMs calls (0 = disabled).
+    void setAdvanceEverySleeps(int n)
+    {
+        m_advanceEverySleeps = n;
+        m_sleepsSinceAdvance = 0;
+    }
 
 private:
     QString currentXml() const
@@ -105,11 +146,43 @@ private:
     qint64 m_nowMs;
     int m_tapCount;
     int m_index;
+    int m_advanceEverySleeps;
+    int m_sleepsSinceAdvance;
+    bool m_tapNeedsAdvance;
 };
 
 QString flowPath(const char *name)
 {
+    const QString leaf = QString::fromUtf8(name);
+    // 1) Next to this source file (works for ./tst_registrar and ctest).
+    const QString besideSource =
+        QFileInfo(QStringLiteral(__FILE__)).absolutePath() + QStringLiteral("/fixtures/") + leaf;
+    if (QDir(besideSource).exists()) {
+        return besideSource;
+    }
+#ifdef QSC_TEST_FIXTURES_DIR
+    const QString baked = QString::fromUtf8(QSC_TEST_FIXTURES_DIR) + QLatin1Char('/') + leaf;
+    if (QDir(baked).exists()) {
+        return baked;
+    }
+#endif
+    const QString fromCwd = QDir::current().absoluteFilePath(leaf);
+    if (QDir(fromCwd).exists()) {
+        return fromCwd;
+    }
     return QFINDTESTDATA(name);
+}
+
+// Short budgets: FakeDriver advances deviceNowMs instantly (no wall waits).
+// stepTimeout must cover multi-dump SignUpForm fills (dump ticks +50ms each).
+batch::RegisterOptions fastOpts()
+{
+    batch::RegisterOptions opts;
+    opts.stepTimeoutSec = 15;
+    opts.smsTimeoutSec = 3;
+    opts.captchaTimeoutSec = 3;
+    opts.deviceDeadlineSec = 30;
+    return opts;
 }
 
 batch::DeviceRow sampleRow(const QString &phone = QStringLiteral("9876543210"))
@@ -150,14 +223,14 @@ private slots:
     void happyPathRegisters()
     {
         FakeDriver driver(flowPath("flow_happy"));
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_happy")));
         driver.setSms({wechatSms(QStringLiteral("482913"), 1697881200000LL)});
 
         QStringList logLines;
-        batch::RegisterOptions opts;
         const batch::RegisterOutcome outcome =
             batch::WechatRegistrar::run(sampleRow(),
                                         driver,
-                                        opts,
+                                        fastOpts(),
                                         [&](const QString &line) { logLines.append(line); });
 
         QCOMPARE(outcome.state, batch::RegState::Registered);
@@ -178,8 +251,9 @@ private slots:
     void mainScreenAtStartIsAlreadyRegistered()
     {
         FakeDriver driver(flowPath("flow_main_start"));
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_main_start")));
         batch::RegisterOutcome outcome =
-            batch::WechatRegistrar::run(sampleRow(), driver, batch::RegisterOptions(), nullptr);
+            batch::WechatRegistrar::run(sampleRow(), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::AlreadyRegistered);
         QCOMPARE(outcome.detail, QStringLiteral("device already logged in"));
     }
@@ -188,25 +262,58 @@ private slots:
     {
         FakeDriver driver(flowPath("flow_already_registered"));
         batch::RegisterOutcome outcome =
-            batch::WechatRegistrar::run(sampleRow(), driver, batch::RegisterOptions(), nullptr);
+            batch::WechatRegistrar::run(sampleRow(), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::AlreadyRegistered);
     }
 
-    void captchaIsNeedsManual()
+    void captchaTimeoutNeedsManualAfterStart()
     {
         FakeDriver driver(flowPath("flow_captcha"));
-        const int tapsBefore = driver.tapCount();
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_captcha")));
+        batch::RegisterOptions opts = fastOpts();
+        opts.captchaTimeoutSec = 2;
+
+        QStringList logLines;
         batch::RegisterOutcome outcome =
-            batch::WechatRegistrar::run(sampleRow(), driver, batch::RegisterOptions(), nullptr);
+            batch::WechatRegistrar::run(sampleRow(),
+                                        driver,
+                                        opts,
+                                        [&](const QString &line) { logLines.append(line); });
+
         QCOMPARE(outcome.state, batch::RegState::NeedsManual);
-        QCOMPARE(driver.tapCount(), tapsBefore);
+        QVERIFY(outcome.detail.contains(QStringLiteral("security verification")));
+        QVERIFY(outcome.detail.contains(QStringLiteral("timeout")));
+        QVERIFY(driver.tapCount() >= 1);
+        QVERIFY(logContainsAny(logLines, QStringLiteral("tap security start")));
+        QVERIFY(logContainsAny(logLines, QStringLiteral("waiting security puzzle")));
+    }
+
+    void captchaPassResumesAfterHumanSolve()
+    {
+        FakeDriver driver(flowPath("flow_security_pass"));
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_security_pass")));
+        driver.setSms({wechatSms(QStringLiteral("482913"), 1697881200000LL)});
+        // After Start → puzzle, one sleep advances to SMS (human solved).
+        driver.setAdvanceEverySleeps(1);
+
+        QStringList logLines;
+        batch::RegisterOutcome outcome =
+            batch::WechatRegistrar::run(sampleRow(),
+                                        driver,
+                                        fastOpts(),
+                                        [&](const QString &line) { logLines.append(line); });
+
+        QCOMPARE(outcome.state, batch::RegState::Registered);
+        QVERIFY(logContainsAny(logLines, QStringLiteral("tap security start")));
+        QVERIFY(logContainsAny(logLines, QStringLiteral("waiting security puzzle")));
+        QVERIFY(driver.typedTexts().contains(QStringLiteral("482913")));
     }
 
     void rateLimitedFails()
     {
         FakeDriver driver(flowPath("flow_rate_limit"));
         batch::RegisterOutcome outcome =
-            batch::WechatRegistrar::run(sampleRow(), driver, batch::RegisterOptions(), nullptr);
+            batch::WechatRegistrar::run(sampleRow(), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::Failed);
         QCOMPARE(outcome.detail, QStringLiteral("rate limited"));
     }
@@ -214,10 +321,10 @@ private slots:
     void smsTimeoutFails()
     {
         FakeDriver driver(flowPath("flow_sms_timeout"));
-        batch::RegisterOptions opts;
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_sms_timeout")));
+        batch::RegisterOptions opts = fastOpts();
         opts.smsTimeoutSec = 1;
         opts.maxSmsResend = 0;
-        opts.stepTimeoutSec = 120;
         batch::RegisterOutcome outcome =
             batch::WechatRegistrar::run(sampleRow(), driver, opts, nullptr);
         QCOMPARE(outcome.state, batch::RegState::Failed);
@@ -230,10 +337,9 @@ private slots:
         driver.setSms({wechatSms(QStringLiteral("111222"), 1697880000000LL)});
         driver.setNowMs(1697881200000LL);
 
-        batch::RegisterOptions opts;
+        batch::RegisterOptions opts = fastOpts();
         opts.smsTimeoutSec = 1;
         opts.maxSmsResend = 0;
-        opts.stepTimeoutSec = 120;
 
         batch::RegisterOutcome outcome =
             batch::WechatRegistrar::run(sampleRow(), driver, opts, nullptr);
@@ -245,9 +351,8 @@ private slots:
     {
         FakeDriver driver(flowPath("flow_deadline"));
         driver.setNowMs(0);
-        batch::RegisterOptions opts;
+        batch::RegisterOptions opts = fastOpts();
         opts.deviceDeadlineSec = 1;
-        opts.stepTimeoutSec = 60;
         batch::RegisterOutcome outcome =
             batch::WechatRegistrar::run(sampleRow(), driver, opts, nullptr);
         QCOMPARE(outcome.state, batch::RegState::Failed);
@@ -259,7 +364,7 @@ private slots:
         FakeDriver driver(flowPath("flow_cancel"));
         driver.setCancelled(true);
         batch::RegisterOutcome outcome =
-            batch::WechatRegistrar::run(sampleRow(), driver, batch::RegisterOptions(), nullptr);
+            batch::WechatRegistrar::run(sampleRow(), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::Cancelled);
     }
 
@@ -269,7 +374,7 @@ private slots:
         driver.setSms({wechatSms(QStringLiteral("482913"), 1697881200000LL)});
 
         batch::RegisterOutcome outcome = batch::WechatRegistrar::run(
-            sampleRow(QStringLiteral("+919876543210")), driver, batch::RegisterOptions(), nullptr);
+            sampleRow(QStringLiteral("+919876543210")), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::Registered);
         QVERIFY(driver.typedTexts().contains(QStringLiteral("9876543210")));
         QVERIFY(!driver.typedTexts().join(QLatin1Char('\n')).contains(QStringLiteral("+919876543210")));
@@ -281,7 +386,7 @@ private slots:
         driver.setSms({wechatSms(QStringLiteral("482913"), 1697881200000LL)});
 
         batch::RegisterOutcome outcome = batch::WechatRegistrar::run(
-            sampleRow(QStringLiteral("+919876543210")), driver, batch::RegisterOptions(), nullptr);
+            sampleRow(QStringLiteral("+919876543210")), driver, fastOpts(), nullptr);
         QCOMPARE(outcome.state, batch::RegState::Registered);
         QVERIFY(driver.typedTexts().contains(QStringLiteral("91")));
         QVERIFY(driver.typedTexts().contains(QStringLiteral("9876543210")));
@@ -298,10 +403,9 @@ private slots:
             "    android.title=WeChat\n"
             "    android.text=Your Weixin code is 654321\n"));
 
-        batch::RegisterOptions opts;
+        batch::RegisterOptions opts = fastOpts();
         opts.smsTimeoutSec = 1;
         opts.maxSmsResend = 0;
-        opts.stepTimeoutSec = 120;
 
         batch::RegisterOutcome outcome =
             batch::WechatRegistrar::run(sampleRow(), driver, opts, nullptr);

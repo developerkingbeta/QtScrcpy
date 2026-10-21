@@ -1,5 +1,6 @@
 #include <QtTest>
 
+#include <QDir>
 #include <QFile>
 
 #include "smsreader.h"
@@ -11,6 +12,17 @@ class TestParsers : public QObject
 
     QString fixturePath(const char *name) const
     {
+#ifdef QSC_TEST_FIXTURES_DIR
+        const QString baked = QStringLiteral(QSC_TEST_FIXTURES_DIR) + QLatin1Char('/')
+            + QString::fromUtf8(name);
+        if (QFile::exists(baked)) {
+            return baked;
+        }
+#endif
+        const QString fromCwd = QDir::current().absoluteFilePath(QString::fromUtf8(name));
+        if (QFile::exists(fromCwd)) {
+            return fromCwd;
+        }
         return QFINDTESTDATA(name);
     }
 

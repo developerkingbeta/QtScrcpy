@@ -1,4 +1,4 @@
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
-  <node text="Register" class="android.widget.Button" bounds="[100,600][400,700]" clickable="true" enabled="true"/>
+  <node text="Sign Up" class="android.widget.Button" bounds="[100,600][400,700]" clickable="true" enabled="true"/>
 </hierarchy>

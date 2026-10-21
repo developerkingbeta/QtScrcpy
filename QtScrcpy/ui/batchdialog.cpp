@@ -360,8 +360,9 @@ bool BatchDialog::confirmRegister(int count)
         return m_confirmHook(count);
     }
     const QString text =
-        tr("Register %1 WeChat accounts with the listed phone numbers? Automation cannot solve "
-           "captchas; those devices will be marked \"Needs manual\".")
+        tr("Register %1 WeChat accounts with the listed phone numbers? Security Verification "
+           "will tap Start and wait for a human to finish any slider puzzle on the device; "
+           "timeouts are marked \"Needs manual\".")
             .arg(count);
     return QMessageBox::question(this, tr("Confirm registration"), text) == QMessageBox::Yes;
 }

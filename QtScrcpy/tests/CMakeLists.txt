@@ -18,6 +18,12 @@ qsc_add_test(tst_registrar)
 qsc_add_test(tst_controller)
 target_link_libraries(tst_controller PRIVATE Qt${QT_DESIRED_VERSION}::Widgets)
 
+# Absolute fixture root so QFINDTESTDATA / wrong cwd cannot starve registrar flows.
+target_compile_definitions(tst_registrar PRIVATE
+    QSC_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+target_compile_definitions(tst_parsers PRIVATE
+    QSC_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+
 add_executable(tst_batchdialog
     tst_batchdialog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../ui/batchdialog.cpp

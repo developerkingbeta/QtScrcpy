@@ -1,4 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
+  <node text="Select country/region code" class="android.widget.TextView" bounds="[50,10][400,40]" clickable="false" enabled="true"/>
   <node text="Search" class="android.widget.EditText" bounds="[50,50][400,120]" clickable="true" enabled="true"/>
 </hierarchy>

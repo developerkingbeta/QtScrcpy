@@ -13,6 +13,8 @@ struct RegisterOptions
 {
     int stepTimeoutSec = 20;
     int smsTimeoutSec = 120;
+    // Wait for a human to finish the on-device slider/puzzle after Start.
+    int captchaTimeoutSec = 150;
     int deviceDeadlineSec = 600;
     int maxSmsResend = 1;
 };

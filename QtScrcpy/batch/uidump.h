@@ -18,6 +18,7 @@ struct UiNode
     QRect bounds;
     bool clickable = false;
     bool enabled = true;
+    bool checked = false;
 
     QPoint center() const
     {

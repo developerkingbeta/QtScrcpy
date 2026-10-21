@@ -3,5 +3,6 @@
   <node text="" class="android.widget.EditText" resource-id="nick" bounds="[50,100][400,180]" clickable="true" enabled="true"/>
   <node text="" class="android.widget.EditText" resource-id="phone" bounds="[50,200][400,280]" clickable="true" enabled="true"/>
   <node text="" class="android.widget.EditText" resource-id="pass" bounds="[50,300][400,380]" clickable="true" enabled="true"/>
+  <node text="I agree" class="android.widget.CheckBox" bounds="[50,420][400,480]" clickable="true" enabled="true"/>
   <node text="Next" class="android.widget.Button" bounds="[100,500][400,580]" clickable="true" enabled="true"/>
 </hierarchy>

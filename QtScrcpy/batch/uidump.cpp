@@ -43,6 +43,7 @@ void readNode(QXmlStreamReader &reader, QList<UiNode> *out)
     node.bounds = parseBounds(attrs.value(QStringLiteral("bounds")).toString());
     node.clickable = parseBoolAttr(attrs.value(QStringLiteral("clickable")).toString(), false);
     node.enabled = parseBoolAttr(attrs.value(QStringLiteral("enabled")).toString(), true);
+    node.checked = parseBoolAttr(attrs.value(QStringLiteral("checked")).toString(), false);
     out->append(node);
 
     while (reader.readNextStartElement()) {

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="This page is provided by security.wechat.com" class="android.widget.TextView" bounds="[100,50][600,90]" clickable="false" enabled="true"/>
+  <node text="Security Verification" class="android.widget.TextView" bounds="[50,200][650,270]" clickable="false" enabled="true"/>
+  <node text="In order to protect WeChat from spammers, this registration requires further verification to prove you are a human." class="android.widget.TextView" bounds="[50,280][650,400]" clickable="false" enabled="true"/>
+  <node text="Start" class="android.widget.Button" bounds="[190,1200][530,1300]" clickable="true" enabled="true"/>
+</hierarchy>

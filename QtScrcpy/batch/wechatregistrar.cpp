@@ -1,6 +1,5 @@
 #include "wechatregistrar.h"
 
-#include <QElapsedTimer>
 #include <QRegularExpression>
 
 #include <random>
@@ -35,42 +34,117 @@ struct TextVariantRow
 // Single calibration table (EN + ZH) for Task 10.
 static const char *const kMainTabsVariants[] = {
     "Chats", "微信", "Contacts", "通讯录", "Discover", "发现", "Me", "我"};
-static const char *const kPrivacyVariants[] = {"Agree", "同意"};
+static const char *const kPrivacyVariants[] = {
+    "Agree",
+    "同意",
+    "I have read and acknowledge",
+    "WECHAT PRIVACY POLICY",
+    "Privacy Policy"};
 static const char *const kPermissionVariants[] = {"Allow", "允许", "While using the app"};
+// Keep these specific: short words like "Register" appear inside Privacy Policy
+// webviews and would steal classification from the real welcome buttons.
 static const char *const kWelcomeVariants[] = {
-    "Sign up via Mobile", "Sign Up", "Register", "注册"};
-static const char *const kSignUpVariants[] = {"Accept and Continue", "Next", "下一步"};
-static const char *const kCountryPickerVariants[] = {"Search", "搜索"};
+    "Sign up via Mobile", "Sign Up", "Log In", "注册", "登录"};
+static const char *const kSignUpVariants[] = {
+    "Accept and Continue",
+    "Next",
+    "下一步",
+    "Enter phone number",
+    "Set password",
+    "Enter alias",
+    "Country/Region",
+    "Sign up via phone number"};
+// Do not include bare "Search" — Privacy Policy / web content often contains that
+// word and would be misclassified as the country picker.
+static const char *const kCountryPickerVariants[] = {
+    "Select country/region code",
+    "选择国家/地区",
+    "选择国家和地区",
+    "搜索"};
 static const char *const kSmsVerifyVariants[] = {"Verification code", "验证码"};
 static const char *const kSmsResendVariants[] = {"Resend", "重新发送"};
 static const char *const kAgreementVariants[] = {
     "I have read and accept", "I agree", "同意协议", "Terms of Service"};
 static const char *const kAlreadyRegisteredVariants[] = {
     "already registered", "已注册", "already linked"};
+// Classification needles for the security.wechat.com gate (intro + puzzle).
+// Prefer long phrases: short needles (<=12) match exactly only (see nodeMatchesVariants).
 static const char *const kCaptchaVariants[] = {
-    "Security Verification", "安全验证", "drag", "拖动", "puzzle", "拼图"};
+    "Security Verification",
+    "安全验证",
+    "security.wechat.com",
+    "Slide to complete the puzzle",
+    "滑动完成拼图",
+    "Drag the puzzle",
+    "Visual mode",
+    "Try a new captcha",
+    "prove you are a human",
+    "prove you’re a human"};
 static const char *const kRateLimitedVariants[] = {
     "too frequent", "过于频繁", "try again later", "稍后再试"};
 
 const TextVariantRow kTextVariants[] = {
     {ScreenKind::MainTabs, kMainTabsVariants, 8},
-    {ScreenKind::PrivacyDialog, kPrivacyVariants, 2},
+    {ScreenKind::PrivacyDialog, kPrivacyVariants, 5},
     {ScreenKind::PermissionDialog, kPermissionVariants, 3},
-    {ScreenKind::WelcomeRegister, kWelcomeVariants, 4},
-    {ScreenKind::SignUpForm, kSignUpVariants, 3},
-    {ScreenKind::CountryPicker, kCountryPickerVariants, 2},
+    {ScreenKind::WelcomeRegister, kWelcomeVariants, 5},
+    {ScreenKind::SignUpForm, kSignUpVariants, 8},
+    {ScreenKind::CountryPicker, kCountryPickerVariants, 4},
     {ScreenKind::SmsVerify, kSmsVerifyVariants, 2},
     {ScreenKind::SmsResend, kSmsResendVariants, 2},
     {ScreenKind::AgreementTerms, kAgreementVariants, 4},
     {ScreenKind::AlreadyRegisteredMsg, kAlreadyRegisteredVariants, 3},
-    {ScreenKind::CaptchaSecurity, kCaptchaVariants, 6},
+    {ScreenKind::CaptchaSecurity, kCaptchaVariants, 10},
     {ScreenKind::RateLimited, kRateLimitedVariants, 4},
 };
+
+// Puzzle overlay after tapping Start — not solvable by UI scripting alone.
+bool hasSecurityPuzzleChallenge(const QList<UiNode> &nodes)
+{
+    static const char *const kPuzzleNeedles[] = {
+        "Slide to complete the puzzle",
+        "滑动完成拼图",
+        "Drag the puzzle",
+        "Visual mode",
+        "Try a new captcha",
+        "Simple mode",
+        "Quit verification"};
+    for (const UiNode &node : nodes) {
+        for (const char *needle : kPuzzleNeedles) {
+            const QString n = QString::fromUtf8(needle);
+            if (node.text.contains(n, Qt::CaseInsensitive)
+                || node.desc.contains(n, Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+        if (node.text.compare(QLatin1String("slider"), Qt::CaseInsensitive) == 0
+            || node.desc.compare(QLatin1String("slider"), Qt::CaseInsensitive) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const UiNode *findSecurityStartButton(const QList<UiNode> &nodes)
+{
+    return UiDump::findAny(nodes,
+                           {QStringLiteral("Start"), QStringLiteral("开始")},
+                           true);
+}
 
 bool nodeMatchesVariants(const UiNode &node, const TextVariantRow &row)
 {
     for (int i = 0; i < row.variantCount; ++i) {
         const QString needle = QString::fromUtf8(row.variants[i]);
+        // Exact match for short labels so webview body text cannot false-hit
+        // welcome/privacy buttons (e.g. the word "Register" inside a policy).
+        if (needle.size() <= 12) {
+            if (node.text.compare(needle, Qt::CaseInsensitive) == 0
+                || node.desc.compare(needle, Qt::CaseInsensitive) == 0) {
+                return true;
+            }
+            continue;
+        }
         if (node.text.contains(needle, Qt::CaseInsensitive)
             || node.desc.contains(needle, Qt::CaseInsensitive)) {
             return true;
@@ -134,6 +208,11 @@ ScreenKind classify(const QList<UiNode> &nodes)
     if (hasMainTabs(nodes)) {
         return ScreenKind::MainTabs;
     }
+    // Privacy / terms webviews before CountryPicker — policy HTML often contains
+    // words that collide with other screens.
+    if (anyNodeMatches(nodes, ScreenKind::PrivacyDialog)) {
+        return ScreenKind::PrivacyDialog;
+    }
     if (anyNodeMatches(nodes, ScreenKind::SmsVerify)
         || anyNodeMatches(nodes, ScreenKind::SmsResend)) {
         return ScreenKind::SmsVerify;
@@ -150,9 +229,6 @@ ScreenKind classify(const QList<UiNode> &nodes)
     }
     if (anyNodeMatches(nodes, ScreenKind::PermissionDialog)) {
         return ScreenKind::PermissionDialog;
-    }
-    if (anyNodeMatches(nodes, ScreenKind::PrivacyDialog)) {
-        return ScreenKind::PrivacyDialog;
     }
     return ScreenKind::Unknown;
 }
@@ -175,6 +251,72 @@ const UiNode *findTapTarget(const QList<UiNode> &nodes, ScreenKind kind)
 {
     const QStringList needles = variantListFor(kind);
     return UiDump::findAny(nodes, needles, false);
+}
+
+// WeChat CountryCodeUI shows dial digits without '+' (e.g. "94"). Prefer exact
+// match so "94" does not hit "994". Search field is often behind an action-bar
+// icon until tapped (no EditText yet).
+const UiNode *findDialCodeRow(const QList<UiNode> &nodes, const QString &dialCode)
+{
+    const QString digits = dialCode.startsWith(QLatin1Char('+')) ? dialCode.mid(1) : dialCode;
+    const QString plusDigits = QLatin1Char('+') + digits;
+    // Skip EditTexts: after searching, the search field often contains the same
+    // digits (e.g. text="94") and would steal the tap from the country row.
+    for (const UiNode &node : nodes) {
+        if (node.cls.contains(QLatin1String("EditText"))) {
+            continue;
+        }
+        if (node.text.compare(digits, Qt::CaseInsensitive) == 0
+            || node.text.compare(dialCode, Qt::CaseInsensitive) == 0
+            || node.text.compare(plusDigits, Qt::CaseInsensitive) == 0) {
+            return &node;
+        }
+    }
+    // WeChat rows look like "India（+91）" / "United States（+1）".
+    for (const UiNode &node : nodes) {
+        if (node.cls.contains(QLatin1String("EditText"))) {
+            continue;
+        }
+        const QString hay = node.text + node.desc;
+        if (hay.contains(plusDigits) || hay.contains(dialCode)) {
+            return &node;
+        }
+    }
+    return nullptr;
+}
+
+const UiNode *findCountrySearchOpener(const QList<UiNode> &nodes)
+{
+    for (const UiNode &node : nodes) {
+        if (!node.clickable || !node.enabled) {
+            continue;
+        }
+        if (node.cls.contains(QLatin1String("EditText"))) {
+            continue;
+        }
+        if (node.desc.contains(QLatin1String("Search"), Qt::CaseInsensitive)
+            || node.desc.contains(QStringLiteral("搜索"))
+            || node.text.contains(QLatin1String("Search"), Qt::CaseInsensitive)
+            || node.text.contains(QStringLiteral("搜索"))) {
+            return &node;
+        }
+    }
+    const UiNode *best = nullptr;
+    for (const UiNode &node : nodes) {
+        if (!node.clickable || !node.enabled) {
+            continue;
+        }
+        if (!node.text.isEmpty() || !node.desc.isEmpty()) {
+            continue;
+        }
+        if (node.bounds.top() > 200 || node.bounds.height() < 40 || node.bounds.width() < 40) {
+            continue;
+        }
+        if (!best || node.bounds.left() > best->bounds.left()) {
+            best = &node;
+        }
+    }
+    return best;
 }
 
 QString extractDialCode(const QString &phone)
@@ -350,8 +492,9 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                                      const std::function<void(const QString &)> &log)
 {
     RegisterOutcome outcome;
-    QElapsedTimer runTimer;
-    runTimer.start();
+    // All budgets use IUiDriver::deviceNowMs so FakeDriver can advance time
+    // instantly via dump/sleepMs (no wall-clock QElapsedTimer spins in tests).
+    const qint64 runStartMs = driver.deviceNowMs();
 
     const QString password = generatePassword();
     const QString nickname = generateNickname();
@@ -362,16 +505,19 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
     bool countrySelected = dialCode.isEmpty();
     int formFieldsTyped = 0;
     bool agreementTicked = false;
+    bool privacyAcked = false;
     qint64 notBeforeMs = 0;
-    QElapsedTimer smsWaitTimer;
+    qint64 smsWaitStartMs = 0;
     bool smsWaitStarted = false;
     int smsResendCount = 0;
     bool smsCodeTyped = false;
     bool countrySearchTyped = false;
+    bool captchaStartTapped = false;
+    qint64 captchaDeadlineMs = 0;
+    bool captchaWaitStarted = false;
 
     ScreenKind lastScreen = ScreenKind::Unknown;
-    QElapsedTimer stepTimer;
-    stepTimer.start();
+    qint64 stepStartMs = driver.deviceNowMs();
 
     auto logStep = [&](const QString &step) {
         if (log) {
@@ -380,7 +526,8 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
     };
 
     auto checkDeadline = [&]() -> bool {
-        if (runTimer.elapsed() > static_cast<qint64>(opts.deviceDeadlineSec) * 1000) {
+        if (driver.deviceNowMs() - runStartMs
+            > static_cast<qint64>(opts.deviceDeadlineSec) * 1000) {
             outcome.state = RegState::Failed;
             outcome.detail = QStringLiteral("device deadline exceeded");
             return true;
@@ -400,10 +547,16 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
     auto noteProgress = [&](ScreenKind screen) -> bool {
         if (screen != lastScreen) {
             lastScreen = screen;
-            stepTimer.restart();
+            stepStartMs = driver.deviceNowMs();
             return false;
         }
-        if (stepTimer.elapsed() > static_cast<qint64>(opts.stepTimeoutSec) * 1000) {
+        // SMS wait has its own smsTimeoutSec budget; dump()+sleep ticks must
+        // not lose to stepTimeout while polling for a code.
+        if (screen == ScreenKind::SmsVerify) {
+            return false;
+        }
+        if (driver.deviceNowMs() - stepStartMs
+            > static_cast<qint64>(opts.stepTimeoutSec) * 1000) {
             outcome.state = RegState::Failed;
             outcome.detail = QStringLiteral("step timeout");
             return true;
@@ -421,15 +574,62 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
 
         const QList<UiNode> nodes = driver.dump();
         const ScreenKind screen = classify(nodes);
+
+        // Security gate uses its own wait budget (human may solve the slider).
+        // Do not fail via stepTimeout while still on that screen.
+        if (screen == ScreenKind::CaptchaSecurity) {
+            if (lastScreen != screen) {
+                lastScreen = screen;
+                stepStartMs = driver.deviceNowMs();
+            }
+            // Captcha only appears after signup submit on device.
+            formSubmitted = true;
+            const auto armCaptchaDeadline = [&]() {
+                captchaDeadlineMs = driver.deviceNowMs()
+                    + static_cast<qint64>(opts.captchaTimeoutSec) * 1000;
+                captchaWaitStarted = true;
+            };
+            if (!captchaWaitStarted) {
+                armCaptchaDeadline();
+            }
+
+            if (hasSecurityPuzzleChallenge(nodes)) {
+                logStep(QStringLiteral("waiting security puzzle"));
+                if (driver.deviceNowMs() >= captchaDeadlineMs) {
+                    outcome.state = RegState::NeedsManual;
+                    outcome.detail =
+                        QStringLiteral("security verification: slider puzzle timeout");
+                    break;
+                }
+                driver.sleepMs(400);
+                continue;
+            }
+
+            const UiNode *startBtn = findSecurityStartButton(nodes);
+            if (startBtn && !captchaStartTapped) {
+                logStep(QStringLiteral("tap security start"));
+                driver.tap(startBtn->center().x(), startBtn->center().y());
+                captchaStartTapped = true;
+                armCaptchaDeadline();
+                continue;
+            }
+
+            // Intro without a Start button, or Start already tapped but puzzle
+            // not yet in the dump — keep polling until timeout.
+            logStep(QStringLiteral("waiting security verification"));
+            if (driver.deviceNowMs() >= captchaDeadlineMs) {
+                outcome.state = RegState::NeedsManual;
+                outcome.detail = QStringLiteral("security verification: timeout");
+                break;
+            }
+            driver.sleepMs(400);
+            continue;
+        }
+
         if (noteProgress(screen)) {
             break;
         }
 
-        if (screen == ScreenKind::CaptchaSecurity) {
-            outcome.state = RegState::NeedsManual;
-            outcome.detail = QStringLiteral("security verification");
-            break;
-        }
         if (screen == ScreenKind::RateLimited) {
             outcome.state = RegState::Failed;
             outcome.detail = QStringLiteral("rate limited");
@@ -455,9 +655,36 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         switch (screen) {
         case ScreenKind::PrivacyDialog: {
             logStep(QStringLiteral("dismiss privacy"));
-            const UiNode *target = findTapTarget(nodes, ScreenKind::PrivacyDialog);
-            if (target) {
-                driver.tap(target->center().x(), target->center().y());
+            // Prefer an unchecked CheckBox (privacy webview / terms sheet).
+            const UiNode *check = nullptr;
+            for (const UiNode &node : nodes) {
+                if (node.cls.contains(QLatin1String("CheckBox")) && node.clickable
+                    && node.enabled && !node.checked) {
+                    check = &node;
+                    break;
+                }
+            }
+            if (check && !privacyAcked) {
+                driver.tap(check->center().x(), check->center().y());
+                privacyAcked = true;
+                break;
+            }
+            const UiNode *next = UiDump::findAny(nodes,
+                                                 {QStringLiteral("Next"),
+                                                  QStringLiteral("下一步"),
+                                                  QStringLiteral("Agree"),
+                                                  QStringLiteral("同意")},
+                                                 true);
+            if (!next) {
+                next = UiDump::findAny(nodes,
+                                       {QStringLiteral("Next"),
+                                        QStringLiteral("下一步"),
+                                        QStringLiteral("Agree"),
+                                        QStringLiteral("同意")},
+                                       false);
+            }
+            if (next) {
+                driver.tap(next->center().x(), next->center().y());
             }
             break;
         }
@@ -471,7 +698,19 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         }
         case ScreenKind::WelcomeRegister: {
             logStep(QStringLiteral("tap register"));
-            const UiNode *target = findTapTarget(nodes, ScreenKind::WelcomeRegister);
+            // Prefer Sign Up over Log In (findAny returns the first match in dump order).
+            const UiNode *target = UiDump::findAny(nodes,
+                                                   {QStringLiteral("Sign up via Mobile"),
+                                                    QStringLiteral("Sign Up"),
+                                                    QStringLiteral("注册")},
+                                                   true);
+            if (!target) {
+                target = UiDump::findAny(nodes,
+                                         {QStringLiteral("Sign up via Mobile"),
+                                          QStringLiteral("Sign Up"),
+                                          QStringLiteral("注册")},
+                                         false);
+            }
             if (target) {
                 driver.tap(target->center().x(), target->center().y());
             }
@@ -479,20 +718,28 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         }
         case ScreenKind::CountryPicker: {
             logStep(QStringLiteral("pick country"));
-            const UiNode *target = UiDump::findAny(nodes, {dialCode}, false);
+            const UiNode *target = findDialCodeRow(nodes, dialCode);
             if (target) {
                 driver.tap(target->center().x(), target->center().y());
                 countrySelected = true;
                 break;
             }
-            if (!countrySearchTyped && !dialCode.isEmpty()) {
-                const QList<UiNode> edits = UiDump::editTexts(nodes);
-                if (!edits.isEmpty()) {
-                    logStep(QStringLiteral("search country"));
-                    driver.tap(edits.first().center().x(), edits.first().center().y());
-                    driver.typeText(dialCode.mid(1));
-                    countrySearchTyped = true;
+            const QList<UiNode> edits = UiDump::editTexts(nodes);
+            if (edits.isEmpty()) {
+                const UiNode *searchOpener = findCountrySearchOpener(nodes);
+                if (searchOpener) {
+                    logStep(QStringLiteral("open country search"));
+                    driver.tap(searchOpener->center().x(), searchOpener->center().y());
                 }
+                break;
+            }
+            if (!countrySearchTyped && !dialCode.isEmpty()) {
+                const QString digits =
+                    dialCode.startsWith(QLatin1Char('+')) ? dialCode.mid(1) : dialCode;
+                logStep(QStringLiteral("search country"));
+                driver.tap(edits.first().center().x(), edits.first().center().y());
+                driver.typeText(digits);
+                countrySearchTyped = true;
             }
             break;
         }
@@ -547,24 +794,51 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                     driver.tap(edits.at(2).center().x(), edits.at(2).center().y());
                     driver.typeText(password);
                     ++formFieldsTyped;
+                    // After typing, IME is showing — BACK dismisses it. (BACK with IME
+                    // already hidden leaves the signup activity; only do this once here.)
+                    driver.pressBack();
                 }
                 break;
             }
             if (!agreementTicked) {
                 logStep(QStringLiteral("accept terms"));
-                const UiNode *agreeNode = findTapTarget(nodes, ScreenKind::AgreementTerms);
+                // Prefer a real CheckBox on device; fixtures often only expose the
+                // consent TextView matched by AgreementTerms variants.
+                const UiNode *agreeNode = nullptr;
+                for (const UiNode &node : nodes) {
+                    if (node.cls.contains(QLatin1String("CheckBox")) && node.clickable
+                        && node.enabled) {
+                        agreeNode = &node;
+                        break;
+                    }
+                }
+                if (!agreeNode) {
+                    agreeNode = findTapTarget(nodes, ScreenKind::AgreementTerms);
+                }
                 if (agreeNode) {
                     driver.tap(agreeNode->center().x(), agreeNode->center().y());
                     agreementTicked = true;
+                } else if (!UiDump::findAny(nodes,
+                                            {QStringLiteral("Accept and Continue"),
+                                             QStringLiteral("I have read and accept")},
+                                            false)) {
+                    // Agreement row still covered by IME.
+                    driver.pressBack();
                 }
                 break;
             }
             logStep(QStringLiteral("submit signup"));
-            const UiNode *next = findTapTarget(nodes, ScreenKind::SignUpForm);
+            // Do not reuse SignUpForm classification needles (placeholders like
+            // "Enter phone number"); only the real continue buttons.
+            const UiNode *next = UiDump::findAny(nodes,
+                                                {QStringLiteral("Accept and Continue"),
+                                                 QStringLiteral("Next"),
+                                                 QStringLiteral("下一步")},
+                                                false);
             if (next) {
                 const qint64 atNextMs = driver.deviceNowMs();
                 notBeforeMs = atNextMs - 30000;
-                smsWaitTimer.restart();
+                smsWaitStartMs = atNextMs;
                 smsWaitStarted = true;
                 driver.tap(next->center().x(), next->center().y());
                 formSubmitted = true;
@@ -576,7 +850,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                 break;
             }
             if (!smsWaitStarted) {
-                smsWaitTimer.restart();
+                smsWaitStartMs = driver.deviceNowMs();
                 smsWaitStarted = true;
             }
             if (!smsCodeTyped) {
@@ -585,7 +859,8 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                     code = SmsReader::extractCodeFromNotifications(driver.notificationDump());
                 }
                 if (code.isEmpty()) {
-                    if (smsWaitTimer.elapsed() > static_cast<qint64>(opts.smsTimeoutSec) * 1000) {
+                    if (driver.deviceNowMs() - smsWaitStartMs
+                        > static_cast<qint64>(opts.smsTimeoutSec) * 1000) {
                         if (smsResendCount < opts.maxSmsResend) {
                             logStep(QStringLiteral("resend sms"));
                             const UiNode *resend = findTapTarget(nodes, ScreenKind::SmsResend);
@@ -593,7 +868,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                                 driver.tap(resend->center().x(), resend->center().y());
                             }
                             ++smsResendCount;
-                            smsWaitTimer.restart();
+                            smsWaitStartMs = driver.deviceNowMs();
                         } else {
                             outcome.state = RegState::Failed;
                             outcome.detail = QStringLiteral("sms timeout");

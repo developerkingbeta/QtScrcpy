@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Security Verification" class="android.widget.TextView" bounds="[50,200][650,270]" clickable="false" enabled="true"/>
+  <node text="Visual mode" resource-id="pHeaderTitle" class="android.widget.TextView" bounds="[160,500][280,540]" clickable="false" enabled="true"/>
+  <node text="Slide to complete the puzzle" resource-id="instructionText" class="android.widget.TextView" bounds="[160,540][520,590]" clickable="false" enabled="true"/>
+  <node text="slider" class="android.widget.Image" bounds="[210,1050][250,1090]" clickable="false" enabled="true"/>
+  <node text="Try a new captcha" resource-id="dialogRefreshBtn" class="android.widget.Button" bounds="[560,400][610,450]" clickable="true" enabled="true"/>
+</hierarchy>
