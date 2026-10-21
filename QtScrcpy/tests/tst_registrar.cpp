@@ -84,6 +84,8 @@ public:
 
     qint64 deviceNowMs() override { return m_nowMs; }
 
+    qint64 steadyNowMs() override { return m_nowMs; }
+
     void sleepMs(int ms) override
     {
         // Instant: advance fake clock only — never QThread::msleep / wall wait.
@@ -307,6 +309,21 @@ private slots:
         QVERIFY(logContainsAny(logLines, QStringLiteral("tap security start")));
         QVERIFY(logContainsAny(logLines, QStringLiteral("waiting security puzzle")));
         QVERIFY(driver.typedTexts().contains(QStringLiteral("482913")));
+    }
+
+    void captchaVerificationFailedExits()
+    {
+        FakeDriver driver(flowPath("flow_security_fail"));
+        QVERIFY2(driver.screenCount() > 0, qPrintable(flowPath("flow_security_fail")));
+        QStringList logLines;
+        batch::RegisterOutcome outcome =
+            batch::WechatRegistrar::run(sampleRow(),
+                                        driver,
+                                        fastOpts(),
+                                        [&](const QString &line) { logLines.append(line); });
+        QCOMPARE(outcome.state, batch::RegState::Failed);
+        QCOMPARE(outcome.detail, QStringLiteral("security verification failed"));
+        QVERIFY(logContainsAny(logLines, QStringLiteral("security verification failed")));
     }
 
     void rateLimitedFails()

@@ -125,6 +125,25 @@ bool hasSecurityPuzzleChallenge(const QList<UiNode> &nodes)
     return false;
 }
 
+// Terminal failure on security.wechat.com (still classifies as CaptchaSecurity).
+bool hasSecurityVerificationFailed(const QList<UiNode> &nodes)
+{
+    static const char *const kFailNeedles[] = {
+        "Verification failed",
+        "验证失败",
+        "verification failed"};
+    for (const UiNode &node : nodes) {
+        for (const char *needle : kFailNeedles) {
+            const QString n = QString::fromUtf8(needle);
+            if (node.text.contains(n, Qt::CaseInsensitive)
+                || node.desc.contains(n, Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 const UiNode *findSecurityStartButton(const QList<UiNode> &nodes)
 {
     return UiDump::findAny(nodes,
@@ -492,8 +511,9 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                                      const std::function<void(const QString &)> &log)
 {
     RegisterOutcome outcome;
-    // All budgets use IUiDriver::deviceNowMs so FakeDriver can advance time
-    // instantly via dump/sleepMs (no wall-clock QElapsedTimer spins in tests).
+    // Step/SMS/device budgets use deviceNowMs (FakeDriver advances via
+    // dump/sleepMs). Captcha human-wait uses steadyNowMs (host wall in
+    // production) so captchaTimeoutSec is real wall time.
     const qint64 runStartMs = driver.deviceNowMs();
 
     const QString password = generatePassword();
@@ -513,8 +533,10 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
     bool smsCodeTyped = false;
     bool countrySearchTyped = false;
     bool captchaStartTapped = false;
-    qint64 captchaDeadlineMs = 0;
     bool captchaWaitStarted = false;
+    bool captchaWaitLogged = false;
+    qint64 captchaStartSteadyMs = 0;
+    qint64 captchaLastLogSteadyMs = 0;
 
     ScreenKind lastScreen = ScreenKind::Unknown;
     qint64 stepStartMs = driver.deviceNowMs();
@@ -523,6 +545,24 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         if (log) {
             log(step);
         }
+    };
+
+    // Captcha budget uses steadyNowMs (host wall in production) so 150s is real
+    // wall time even when dump()/adb is slow. Arm at most once — never reset
+    // while polling the same puzzle.
+    auto armCaptchaDeadlineOnce = [&]() {
+        if (captchaWaitStarted) {
+            return;
+        }
+        captchaStartSteadyMs = driver.steadyNowMs();
+        captchaWaitStarted = true;
+    };
+    auto captchaTimedOut = [&]() -> bool {
+        if (!captchaWaitStarted) {
+            return false;
+        }
+        return driver.steadyNowMs() - captchaStartSteadyMs
+            >= static_cast<qint64>(opts.captchaTimeoutSec) * 1000;
     };
 
     auto checkDeadline = [&]() -> bool {
@@ -550,8 +590,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
             stepStartMs = driver.deviceNowMs();
             return false;
         }
-        // SMS wait has its own smsTimeoutSec budget; dump()+sleep ticks must
-        // not lose to stepTimeout while polling for a code.
+        // SMS wait has its own budget; captcha always continues before this.
         if (screen == ScreenKind::SmsVerify) {
             return false;
         }
@@ -575,27 +614,46 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         const QList<UiNode> nodes = driver.dump();
         const ScreenKind screen = classify(nodes);
 
-        // Security gate uses its own wait budget (human may solve the slider).
-        // Do not fail via stepTimeout while still on that screen.
+        // Security gate: stay here until classify leaves CaptchaSecurity (SMS /
+        // next screen), verification fails, or captchaTimeoutSec wall expires.
+        // Never "false-clear" on a sparse dump — that hung RETRY2 with no FINAL.
         if (screen == ScreenKind::CaptchaSecurity) {
             if (lastScreen != screen) {
                 lastScreen = screen;
                 stepStartMs = driver.deviceNowMs();
             }
-            // Captcha only appears after signup submit on device.
             formSubmitted = true;
-            const auto armCaptchaDeadline = [&]() {
-                captchaDeadlineMs = driver.deviceNowMs()
-                    + static_cast<qint64>(opts.captchaTimeoutSec) * 1000;
-                captchaWaitStarted = true;
-            };
-            if (!captchaWaitStarted) {
-                armCaptchaDeadline();
+
+            if (hasSecurityVerificationFailed(nodes)) {
+                logStep(QStringLiteral("security verification failed"));
+                outcome.state = RegState::Failed;
+                outcome.detail = QStringLiteral("security verification failed");
+                break;
             }
 
-            if (hasSecurityPuzzleChallenge(nodes)) {
-                logStep(QStringLiteral("waiting security puzzle"));
-                if (driver.deviceNowMs() >= captchaDeadlineMs) {
+            const UiNode *startBtn = findSecurityStartButton(nodes);
+            if (startBtn && !captchaStartTapped) {
+                logStep(QStringLiteral("tap security start"));
+                driver.tap(startBtn->center().x(), startBtn->center().y());
+                captchaStartTapped = true;
+                armCaptchaDeadlineOnce();
+                continue;
+            }
+
+            armCaptchaDeadlineOnce();
+            const bool puzzleUp = hasSecurityPuzzleChallenge(nodes);
+            if (puzzleUp) {
+                const qint64 nowSteady = driver.steadyNowMs();
+                if (!captchaWaitLogged) {
+                    logStep(QStringLiteral(
+                        "waiting security puzzle — USER: complete slider on device"));
+                    captchaWaitLogged = true;
+                    captchaLastLogSteadyMs = nowSteady;
+                } else if (nowSteady - captchaLastLogSteadyMs >= 10000) {
+                    logStep(QStringLiteral("waiting security puzzle"));
+                    captchaLastLogSteadyMs = nowSteady;
+                }
+                if (captchaTimedOut()) {
                     outcome.state = RegState::NeedsManual;
                     outcome.detail =
                         QStringLiteral("security verification: slider puzzle timeout");
@@ -605,19 +663,10 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                 continue;
             }
 
-            const UiNode *startBtn = findSecurityStartButton(nodes);
-            if (startBtn && !captchaStartTapped) {
-                logStep(QStringLiteral("tap security start"));
-                driver.tap(startBtn->center().x(), startBtn->center().y());
-                captchaStartTapped = true;
-                armCaptchaDeadline();
-                continue;
-            }
-
-            // Intro without a Start button, or Start already tapped but puzzle
-            // not yet in the dump — keep polling until timeout.
+            // Intro, post-Start loading, or residual title after solve — keep
+            // polling until the screen classifies as something else.
             logStep(QStringLiteral("waiting security verification"));
-            if (driver.deviceNowMs() >= captchaDeadlineMs) {
+            if (captchaTimedOut()) {
                 outcome.state = RegState::NeedsManual;
                 outcome.detail = QStringLiteral("security verification: timeout");
                 break;

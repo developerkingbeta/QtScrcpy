@@ -20,6 +20,7 @@ public:
     QList<SmsMessage> readSms() override;
     QString notificationDump() override;
     qint64 deviceNowMs() override;
+    qint64 steadyNowMs() override;
     void sleepMs(int ms) override;
     bool cancelled() const override;
 

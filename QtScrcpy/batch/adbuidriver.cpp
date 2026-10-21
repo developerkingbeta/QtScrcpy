@@ -4,6 +4,7 @@
 #include "smsreader.h"
 #include "uidump.h"
 
+#include <QDateTime>
 #include <QThread>
 
 namespace batch {
@@ -167,20 +168,27 @@ QString AdbUiDriver::notificationDump()
 
 qint64 AdbUiDriver::deviceNowMs()
 {
+    // Device clock for SMS notBefore / step budgets. Never return 0 on failure
+    // (that disabled timeouts). Fall back to host wall if adb date fails.
     const AdbResult result = AdbRunner::run(
         m_serial,
         {QStringLiteral("shell"), QStringLiteral("date"), QStringLiteral("+%s")},
         kShellTimeoutMs,
         m_cancel);
-    if (!result.ok()) {
-        return 0;
+    if (result.ok()) {
+        bool ok = false;
+        const qint64 seconds = result.out.trimmed().toLongLong(&ok);
+        if (ok && seconds > 0) {
+            return seconds * 1000;
+        }
     }
-    bool ok = false;
-    const qint64 seconds = result.out.trimmed().toLongLong(&ok);
-    if (!ok) {
-        return 0;
-    }
-    return seconds * 1000;
+    return QDateTime::currentMSecsSinceEpoch();
+}
+
+qint64 AdbUiDriver::steadyNowMs()
+{
+    // Host wall clock — captchaTimeoutSec is real wall time regardless of adb.
+    return QDateTime::currentMSecsSinceEpoch();
 }
 
 void AdbUiDriver::sleepMs(int ms)

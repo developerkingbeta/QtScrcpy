@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="" class="android.widget.FrameLayout" package="com.tencent.mm" bounds="[0,0][720,1500]">
+    <node index="0" text="Verification failed" class="android.widget.TextView" package="com.tencent.mm" bounds="[100,400][600,500]" />
+    <node index="1" text="Close" class="android.widget.Button" package="com.tencent.mm" clickable="true" bounds="[250,700][470,780]" />
+    <node index="2" text="This page is provided by security.wechat.com" class="android.widget.TextView" package="com.tencent.mm" bounds="[100,800][620,850]" />
+  </node>
+</hierarchy>

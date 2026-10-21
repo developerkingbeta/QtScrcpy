@@ -37,7 +37,11 @@ public:
     virtual bool launchWechat() = 0;
     virtual QList<SmsMessage> readSms() = 0;
     virtual QString notificationDump() = 0;
+    // Device/SMS clock (may be coarse or adb-backed on device).
     virtual qint64 deviceNowMs() = 0;
+    // Steady clock for human-wait budgets (captcha). Must advance with sleepMs
+    // in fakes; production uses host wall time so 150s means 150s wall.
+    virtual qint64 steadyNowMs() = 0;
     virtual void sleepMs(int ms) = 0;
     virtual bool cancelled() const = 0;
 };
