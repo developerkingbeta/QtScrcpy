@@ -243,6 +243,8 @@ source_group(util FILES ${QC_UTIL_SOURCES})
 add_subdirectory(batch/third_party/miniz)
 
 set(QC_BATCH_SOURCES
+    batch/adbrunner.h
+    batch/adbrunner.cpp
     batch/devicerow.h
     batch/hostcheck.h
     batch/hostcheck.cpp

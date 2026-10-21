@@ -10,4 +10,6 @@ endfunction()
 
 qsc_add_test(tst_hostcheck)
 qsc_add_test(tst_import)
+qsc_add_test(tst_adbrunner)
 set_tests_properties(tst_import PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
+set_tests_properties(tst_adbrunner PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
