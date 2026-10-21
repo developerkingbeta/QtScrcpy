@@ -113,12 +113,6 @@ You can control all your phones at the same time.
 
 ![group-control-demo](docs/image/group-control.gif)
 
-## Batch WeChat registration
-
-Open **Batch WeChat...** in the Wireless group on the main window. Upload a device sheet (`.xlsx` or `.csv`) with columns **IP**, **Port** (optional, default 5555), and **Phone**. Use **Re-check connections** after devices are online, then **Check / Install WeChat** with your APK, and **Register selected** for checked rows that are connected with WeChat installed.
-
-Outcomes are written to `registrations.csv` in the app config directory under `wechat-batch/`. Rows can show **Registered**, **Already registered**, **Needs manual** (captcha or risk control), or connection/install errors. Automation cannot solve captchas; those devices stay marked for manual completion.
-
 ## Star History
 
 [![Star History Chart](https://star-history.dera.page/svg?repos=barry-ran/QtScrcpy&type=Date)](https://star-history.dera.page/#barry-ran/QtScrcpy&Date)
