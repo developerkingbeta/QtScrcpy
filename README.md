@@ -85,7 +85,7 @@ QuickAssistant Features&Functions:
 
 ## Batch WeChat registration
 
-Open the main window and click **Batch WeChat...** in the wireless device group to import devices and run registration in parallel.
+Open **Batch WeChat...** in the Wireless group on the main window to import devices and run registration in parallel. Upload a sheet, use **Re-check connections** after devices are online, **Check / Install WeChat** with your APK, then **Register selected** for checked rows that are connected with WeChat installed.
 
 **Sheet columns** (first row is headers; `.xlsx` or `.csv`):
 
@@ -225,6 +225,7 @@ Note: it is not necessary to keep your Android device connected via USB after yo
 - Start adbd: Start the adbd service of the Android device. You must start it before the wireless connection.
 - Wireless connect: Connect to Android devices wirelessly
 - Wireless disconnect: Disconnect wirelessly connected Android devices
+- Batch WeChat...: Open the batch WeChat registration dialog ([details](#batch-wechat-registration))
 - adb command: execute customized ADB commands (blocking commands are not supported now, such as a shell)
 
 

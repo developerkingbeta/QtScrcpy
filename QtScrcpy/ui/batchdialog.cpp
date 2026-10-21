@@ -108,19 +108,24 @@ void BatchDialog::buildUi()
     root->addLayout(toolbar);
 
     auto *apkRow = new QHBoxLayout();
+    m_apkCaptionLabel = new QLabel(tr("WeChat APK:"), this);
+    m_apkCaptionLabel->setObjectName(QStringLiteral("batchApkCaptionLabel"));
     m_apkLabel = new QLabel(this);
+    m_apkLabel->setObjectName(QStringLiteral("batchApkPathLabel"));
     m_chooseApkBtn = new QPushButton(tr("Choose APK..."), this);
     m_chooseApkBtn->setObjectName(QStringLiteral("batchChooseApkBtn"));
-    apkRow->addWidget(new QLabel(tr("WeChat APK:"), this));
+    apkRow->addWidget(m_apkCaptionLabel);
     apkRow->addWidget(m_apkLabel, 1);
     apkRow->addWidget(m_chooseApkBtn);
     root->addLayout(apkRow);
 
     auto *parallelRow = new QHBoxLayout();
+    m_parallelCaptionLabel = new QLabel(tr("Parallel devices"), this);
+    m_parallelCaptionLabel->setObjectName(QStringLiteral("batchParallelCaptionLabel"));
     m_parallelSpin = new QSpinBox(this);
     m_parallelSpin->setObjectName(QStringLiteral("batchParallelSpin"));
     m_parallelSpin->setRange(1, 8);
-    parallelRow->addWidget(new QLabel(tr("Parallel devices"), this));
+    parallelRow->addWidget(m_parallelCaptionLabel);
     parallelRow->addWidget(m_parallelSpin);
     parallelRow->addStretch();
     root->addLayout(parallelRow);
@@ -128,9 +133,12 @@ void BatchDialog::buildUi()
     auto *summaryRow = new QHBoxLayout();
     m_summaryIcon = new QLabel(this);
     m_summaryIcon->setObjectName(QStringLiteral("batchSummaryIcon"));
+    m_summaryWarningLabel = new QLabel(this);
+    m_summaryWarningLabel->setObjectName(QStringLiteral("batchSummaryWarningLabel"));
     m_summaryLabel = new QLabel(this);
     m_summaryLabel->setObjectName(QStringLiteral("batchSummaryLabel"));
     summaryRow->addWidget(m_summaryIcon);
+    summaryRow->addWidget(m_summaryWarningLabel);
     summaryRow->addWidget(m_summaryLabel, 1);
     root->addLayout(summaryRow);
 
@@ -186,8 +194,14 @@ void BatchDialog::setupAccessibility()
 {
     m_uploadBtn->setAccessibleName(tr("Upload Excel sheet"));
     m_recheckBtn->setAccessibleName(tr("Re-check device connections"));
+    m_apkCaptionLabel->setAccessibleName(tr("WeChat APK label"));
+    m_apkLabel->setAccessibleName(tr("WeChat APK path not chosen"));
     m_chooseApkBtn->setAccessibleName(tr("Choose WeChat APK file"));
+    m_parallelCaptionLabel->setAccessibleName(tr("Parallel devices label"));
     m_parallelSpin->setAccessibleName(tr("Parallel devices"));
+    m_summaryIcon->setAccessibleName(tr("Summary status warning icon"));
+    m_summaryWarningLabel->setAccessibleName(tr("Summary connection warning"));
+    m_summaryLabel->setAccessibleName(tr("Device batch summary"));
     m_table->setAccessibleName(tr("Device batch table"));
     m_installBtn->setAccessibleName(tr("Check and install WeChat"));
     m_registerBtn->setAccessibleName(tr("Register selected devices"));
@@ -221,8 +235,10 @@ void BatchDialog::refreshApkLabel()
     const QString path = settings.apkPath();
     if (path.isEmpty()) {
         m_apkLabel->setText(tr("not chosen"));
+        m_apkLabel->setAccessibleName(tr("WeChat APK path not chosen"));
     } else {
         m_apkLabel->setText(path);
+        m_apkLabel->setAccessibleName(tr("WeChat APK path %1").arg(path));
     }
 }
 
@@ -326,12 +342,15 @@ void BatchDialog::updateSummaryDisplay(int total, int connected, int wechatInsta
     m_summaryLabel->setText(summary);
 
     if (total > 0 && connected < total) {
+        const QString warningText = tr("Not all devices are connected.");
         const QIcon warningIcon = style()->standardIcon(QStyle::SP_MessageBoxWarning);
         m_summaryIcon->setPixmap(warningIcon.pixmap(16, 16));
-        m_summaryIcon->setToolTip(tr("Not all devices are connected."));
+        m_summaryIcon->setToolTip(warningText);
+        m_summaryWarningLabel->setText(warningText);
     } else {
         m_summaryIcon->clear();
         m_summaryIcon->setToolTip(QString());
+        m_summaryWarningLabel->clear();
     }
 }
 

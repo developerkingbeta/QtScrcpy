@@ -76,10 +76,13 @@ private:
 
     QPushButton *m_uploadBtn = nullptr;
     QPushButton *m_recheckBtn = nullptr;
+    QLabel *m_apkCaptionLabel = nullptr;
     QLabel *m_apkLabel = nullptr;
     QPushButton *m_chooseApkBtn = nullptr;
+    QLabel *m_parallelCaptionLabel = nullptr;
     QSpinBox *m_parallelSpin = nullptr;
     QLabel *m_summaryIcon = nullptr;
+    QLabel *m_summaryWarningLabel = nullptr;
     QLabel *m_summaryLabel = nullptr;
     QTableView *m_table = nullptr;
     QPushButton *m_installBtn = nullptr;
