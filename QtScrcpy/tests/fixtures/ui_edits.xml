@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="" resource-id="phone" class="android.widget.EditText"
+        package="com.tencent.mm" content-desc="" clickable="true" enabled="true"
+        bounds="[0,400][500,460]" />
+  <node index="1" text="" resource-id="nick" class="android.widget.EditText"
+        package="com.tencent.mm" content-desc="" clickable="true" enabled="true"
+        bounds="[0,100][500,160]" />
+  <node index="2" text="" resource-id="pass" class="android.widget.EditText"
+        package="com.tencent.mm" content-desc="" clickable="true" enabled="false"
+        bounds="[0,250][500,310]" />
+</hierarchy>

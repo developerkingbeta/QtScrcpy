@@ -1,0 +1,2 @@
+Row: 0 address=WeChat, body=WeChat: 482913 is your verification code, date=1697881400000
+Row: 1 address=1069000000, body=Other message, date=1697881200000

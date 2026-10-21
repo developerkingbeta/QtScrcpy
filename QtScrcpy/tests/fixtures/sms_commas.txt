@@ -1,0 +1,2 @@
+Row: 0 address=1069000000, body=Hello, dear user, your code is 111222, date=1697881200000
+Row: 1 address=10086, body=Plain promo, no wechat here, date=1697881300000

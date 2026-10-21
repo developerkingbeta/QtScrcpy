@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node index="0" text="Register" resource-id="" class="android.widget.TextView"
+        package="com.tencent.mm" content-desc="" clickable="true" enabled="true"
+        bounds="[0,100][200,150]" />
+  <node index="1" text="" resource-id="" class="android.widget.TextView"
+        package="com.tencent.mm" content-desc="注册" clickable="true" enabled="true"
+        bounds="[0,200][200,250]" />
+  <node index="2" text="NEXT" resource-id="" class="android.widget.Button"
+        package="com.tencent.mm" content-desc="下一步" clickable="true" enabled="true"
+        bounds="[0,300][200,350]" />
+</hierarchy>

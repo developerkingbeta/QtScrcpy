@@ -258,6 +258,10 @@ set(QC_BATCH_SOURCES
     batch/deviceimport.cpp
     batch/registrationstore.h
     batch/registrationstore.cpp
+    batch/smsreader.h
+    batch/smsreader.cpp
+    batch/uidump.h
+    batch/uidump.cpp
 )
 source_group(batch FILES ${QC_BATCH_SOURCES})
 
