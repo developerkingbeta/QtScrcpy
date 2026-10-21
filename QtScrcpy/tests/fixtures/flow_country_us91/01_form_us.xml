@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Sign up via phone number" class="android.widget.TextView" bounds="[130,193][589,247]" clickable="false" enabled="true"/>
+  <node text="Enter alias" class="android.widget.EditText" bounds="[220,477][669,578]" clickable="true" enabled="true"/>
+  <node text="Country/Region" class="android.widget.TextView" bounds="[36,587][209,670]" clickable="false" enabled="true"/>
+  <node text="United States（+1）" class="android.widget.TextView" bounds="[209,606][489,651]" clickable="true" enabled="true"/>
+  <node text="Enter phone number" class="android.widget.EditText" bounds="[220,679][669,780]" clickable="true" enabled="true"/>
+  <node text="Set password" class="android.widget.EditText" bounds="[220,801][669,859]" clickable="true" enabled="true"/>
+  <node text="I have read and accept the WeChat Terms of Service" class="android.widget.TextView" bounds="[101,1105][662,1181]" clickable="true" enabled="true"/>
+  <node text="Accept and Continue" class="android.widget.Button" bounds="[174,1290][545,1376]" clickable="true" enabled="true"/>
+</hierarchy>

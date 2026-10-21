@@ -216,6 +216,56 @@ QString extractDialCode(const QString &phone)
     return QLatin1Char('+') + match.captured(1);
 }
 
+QString plusDialInText(const QString &text)
+{
+    static const QRegularExpression re(QStringLiteral(R"([+＋](\d{1,3}))"));
+    const QRegularExpressionMatch match = re.match(text);
+    if (!match.hasMatch()) {
+        return QString();
+    }
+    return QLatin1Char('+') + match.captured(1);
+}
+
+// Any dial code shown on the signup form (e.g. "United States（+1）").
+QString formShownDialCode(const QList<UiNode> &nodes)
+{
+    QString best;
+    for (const UiNode &node : nodes) {
+        const QString candidates[] = {node.text, node.desc};
+        for (size_t i = 0; i < 2; ++i) {
+            const QString dial = plusDialInText(candidates[i]);
+            if (dial.isEmpty()) {
+                continue;
+            }
+            if (best.isEmpty() || dial.size() > best.size()) {
+                best = dial;
+            }
+        }
+    }
+    return best;
+}
+
+const UiNode *findCountryRegionOpener(const QList<UiNode> &nodes, const QString &shownDial)
+{
+    if (shownDial.isEmpty()) {
+        return nullptr;
+    }
+    const UiNode *clickableWithDial = nullptr;
+    for (const UiNode &node : nodes) {
+        const QString hay = node.text + node.desc;
+        if (!hay.contains(shownDial)) {
+            continue;
+        }
+        if (node.clickable) {
+            return &node;
+        }
+        if (!clickableWithDial) {
+            clickableWithDial = &node;
+        }
+    }
+    return clickableWithDial;
+}
+
 // Prefer a visible "+NN" row that is a prefix of phone (form / picker calibration).
 QString dialCodeFromNodes(const QString &phone, const QList<UiNode> &nodes)
 {
@@ -317,6 +367,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
     bool smsWaitStarted = false;
     int smsResendCount = 0;
     bool smsCodeTyped = false;
+    bool countrySearchTyped = false;
 
     ScreenKind lastScreen = ScreenKind::Unknown;
     QElapsedTimer stepTimer;
@@ -428,31 +479,46 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         }
         case ScreenKind::CountryPicker: {
             logStep(QStringLiteral("pick country"));
-            const QString visibleDial = dialCodeFromNodes(row.phone, nodes);
-            if (!visibleDial.isEmpty()) {
-                dialCode = visibleDial;
-                phoneEntry = row.phone.mid(dialCode.size());
-            }
             const UiNode *target = UiDump::findAny(nodes, {dialCode}, false);
             if (target) {
                 driver.tap(target->center().x(), target->center().y());
                 countrySelected = true;
+                break;
+            }
+            if (!countrySearchTyped && !dialCode.isEmpty()) {
+                const QList<UiNode> edits = UiDump::editTexts(nodes);
+                if (!edits.isEmpty()) {
+                    logStep(QStringLiteral("search country"));
+                    driver.tap(edits.first().center().x(), edits.first().center().y());
+                    driver.typeText(dialCode.mid(1));
+                    countrySearchTyped = true;
+                }
             }
             break;
         }
         case ScreenKind::SignUpForm: {
             if (!countrySelected && !dialCode.isEmpty()) {
-                logStep(QStringLiteral("open country picker"));
-                const QString visibleDial = dialCodeFromNodes(row.phone, nodes);
-                if (!visibleDial.isEmpty()) {
-                    dialCode = visibleDial;
-                    phoneEntry = row.phone.mid(dialCode.size());
+                const QString shownDial = formShownDialCode(nodes);
+                const QString prefixDial = dialCodeFromNodes(row.phone, nodes);
+                if (!shownDial.isEmpty() && shownDial == dialCode) {
+                    countrySelected = true;
+                } else if (!shownDial.isEmpty() && shownDial != dialCode) {
+                    logStep(QStringLiteral("open country picker"));
+                    const UiNode *dialRow = findCountryRegionOpener(nodes, shownDial);
+                    if (dialRow) {
+                        driver.tap(dialRow->center().x(), dialRow->center().y());
+                    }
+                    break;
+                } else if (!prefixDial.isEmpty()) {
+                    countrySelected = true;
+                } else {
+                    logStep(QStringLiteral("open country picker"));
+                    const UiNode *dialRow = UiDump::findAny(nodes, {dialCode}, false);
+                    if (dialRow) {
+                        driver.tap(dialRow->center().x(), dialRow->center().y());
+                    }
+                    break;
                 }
-                const UiNode *dialRow = UiDump::findAny(nodes, {dialCode}, false);
-                if (dialRow) {
-                    driver.tap(dialRow->center().x(), dialRow->center().y());
-                }
-                break;
             }
             if (formFieldsTyped == 0) {
                 logStep(QStringLiteral("fill nickname"));
@@ -517,9 +583,6 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                 QString code = SmsReader::extractWechatCode(driver.readSms(), notBeforeMs);
                 if (code.isEmpty() && smsResendCount >= 1) {
                     code = SmsReader::extractCodeFromNotifications(driver.notificationDump());
-                    if (!code.isEmpty() && driver.deviceNowMs() < notBeforeMs) {
-                        code.clear();
-                    }
                 }
                 if (code.isEmpty()) {
                     if (smsWaitTimer.elapsed() > static_cast<qint64>(opts.smsTimeoutSec) * 1000) {

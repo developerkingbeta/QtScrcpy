@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Search" class="android.widget.EditText" bounds="[50,50][400,120]" clickable="true" enabled="true"/>
+  <node text="India（+91）" class="android.widget.TextView" bounds="[50,200][400,260]" clickable="true" enabled="true"/>
+</hierarchy>

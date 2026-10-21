@@ -72,6 +72,8 @@ public:
 
     void setSms(const QList<batch::SmsMessage> &sms) { m_sms = sms; }
 
+    void setNotifications(const QString &dump) { m_notifications = dump; }
+
     int tapCount() const { return m_tapCount; }
 
     QStringList typedTexts() const { return m_typedTexts; }
@@ -271,6 +273,41 @@ private slots:
         QCOMPARE(outcome.state, batch::RegState::Registered);
         QVERIFY(driver.typedTexts().contains(QStringLiteral("9876543210")));
         QVERIFY(!driver.typedTexts().join(QLatin1Char('\n')).contains(QStringLiteral("+919876543210")));
+    }
+
+    void countryMismatchOpensPickerForIndia()
+    {
+        FakeDriver driver(flowPath("flow_country_us91"));
+        driver.setSms({wechatSms(QStringLiteral("482913"), 1697881200000LL)});
+
+        batch::RegisterOutcome outcome = batch::WechatRegistrar::run(
+            sampleRow(QStringLiteral("+919876543210")), driver, batch::RegisterOptions(), nullptr);
+        QCOMPARE(outcome.state, batch::RegState::Registered);
+        QVERIFY(driver.typedTexts().contains(QStringLiteral("91")));
+        QVERIFY(driver.typedTexts().contains(QStringLiteral("9876543210")));
+        QVERIFY(!driver.typedTexts().join(QLatin1Char('\n')).contains(QStringLiteral("+919876543210")));
+    }
+
+    void staleNotificationCodeNotTyped()
+    {
+        FakeDriver driver(flowPath("flow_stale_sms"));
+        driver.setSms({wechatSms(QStringLiteral("111222"), 1697880000000LL)});
+        driver.setNowMs(1697881200000LL);
+        driver.setNotifications(QStringLiteral(
+            "NotificationRecord(0xabc123: pkg=com.tencent.mm)\n"
+            "    android.title=WeChat\n"
+            "    android.text=Your Weixin code is 654321\n"));
+
+        batch::RegisterOptions opts;
+        opts.smsTimeoutSec = 1;
+        opts.maxSmsResend = 0;
+        opts.stepTimeoutSec = 120;
+
+        batch::RegisterOutcome outcome =
+            batch::WechatRegistrar::run(sampleRow(), driver, opts, nullptr);
+        QCOMPARE(outcome.state, batch::RegState::Failed);
+        QVERIFY(!driver.typedTexts().contains(QStringLiteral("654321")));
+        QVERIFY(!driver.typedTexts().contains(QStringLiteral("111222")));
     }
 
     void generatedPasswordShape()
