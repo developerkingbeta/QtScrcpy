@@ -181,6 +181,8 @@ set(QC_UI_SOURCES
     ui/videoform.h
     ui/videoform.cpp
     ui/videoform.ui
+    ui/batchdialog.cpp
+    ui/batchdialog.h
     ui/dialog.cpp
     ui/dialog.h
     ui/dialog.ui

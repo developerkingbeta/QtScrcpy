@@ -30,6 +30,8 @@
 #include <QVBoxLayout>
 #include <QUrl>
 
+#include "adbrunner.h"
+#include "batchdialog.h"
 #include "config.h"
 #include "dialog.h"
 #include "hostcheck.h"
@@ -1334,6 +1336,23 @@ void Dialog::on_wirelessDisConnectBtn_clicked()
     adbArgs << "disconnect";
     adbArgs << addr;
     m_adb.execute("", adbArgs);
+}
+
+void Dialog::on_batchWechatBtn_clicked()
+{
+    batch::AdbRunner::setConfiguredAdbPath(Config::getInstance().getAdbPath());
+    if (m_batchDialog) {
+        m_batchDialog->raise();
+        m_batchDialog->activateWindow();
+        return;
+    }
+
+    auto *dialog = new BatchDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &BatchDialog::logLine, this, [this](const QString &line) { outLog(line); });
+    connect(dialog, &QObject::destroyed, this, [this]() { m_batchDialog.clear(); });
+    m_batchDialog = dialog;
+    dialog->show();
 }
 
 void Dialog::on_selectRecordPathBtn_clicked()

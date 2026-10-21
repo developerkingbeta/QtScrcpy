@@ -27,6 +27,7 @@ class QCheckBox;
 class QGroupBox;
 class QPushButton;
 class QSpinBox;
+class BatchDialog;
 class Dialog : public QWidget
 {
     Q_OBJECT
@@ -52,6 +53,7 @@ private slots:
     void on_startAdbdBtn_clicked();
     void on_getIPBtn_clicked();
     void on_wirelessDisConnectBtn_clicked();
+    void on_batchWechatBtn_clicked();
     void on_selectRecordPathBtn_clicked();
     void on_recordPathEdt_textChanged(const QString &arg1);
     void on_adbCommandBtn_clicked();
@@ -150,6 +152,7 @@ private:
     quint32 m_prevBitRate = 2000000;
     int m_prevMaxSizeIndex = 0;
     QPointer<PresetConfigDialog> m_presetDialog;
+    QPointer<BatchDialog> m_batchDialog;
 };
 
 #endif // DIALOG_H

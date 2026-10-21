@@ -83,10 +83,41 @@ QuickAssistant Features&Functions:
 - Telegram Group：https://t.me/+Ylf_5V_rDCMyODQ1
 - [QuickAssistant](https://lrbnfell4p.feishu.cn/drive/folder/Hqckfxj5el1Wjpd9uezcX71lnBh)
 
+## Batch WeChat registration
+
+Open the main window and click **Batch WeChat...** in the wireless device group to import devices and run registration in parallel.
+
+**Sheet columns** (first row is headers; `.xlsx` or `.csv`):
+
+| Column | Accepted header names |
+| --- | --- |
+| Tailscale / device IP | `ip`, `tailscale_ip`, `device_ip`, `host` |
+| Phone number | `phone`, `phone_number`, `mobile`, `msisdn` |
+| Optional ADB port | `port`, `adb_port` (default `5555`) |
+
+Each row must be a private IPv4 address (Tailscale `100.64.0.0/10` is allowed) and a unique phone number. Duplicate IPs or phones are skipped with a warning.
+
+**Dialog actions**
+
+- **Upload Excel...** — load the sheet and probe connectivity for every row.
+- **Re-check connections** — refresh connection state after devices come online.
+- **Choose APK...** — pick the WeChat `.apk` used when WeChat is missing (path is remembered).
+- **Check / Install WeChat** — for all connected rows, detect `com.tencent.mm` and install the APK if needed.
+- **Register selected** — run automated signup on checked rows that are connected, have WeChat installed, and are not already registered (confirmation required).
+- **Cancel** — stop the current batch job; **Open results CSV** opens persisted outcomes under the app data folder.
+
+**Outcomes** (per device): `Registered`, `Already registered`, `Needs manual` (captcha / risk control), `Failed`, or `Cancelled`. Passwords and SMS codes are never written to the log or CSV.
+
 ## Group control
 You can control all your phones at the same time.
 
 ![group-control-demo](docs/image/group-control.gif)
+
+## Batch WeChat registration
+
+Open **Batch WeChat...** in the Wireless group on the main window. Upload a device sheet (`.xlsx` or `.csv`) with columns **IP**, **Port** (optional, default 5555), and **Phone**. Use **Re-check connections** after devices are online, then **Check / Install WeChat** with your APK, and **Register selected** for checked rows that are connected with WeChat installed.
+
+Outcomes are written to `registrations.csv` in the app config directory under `wechat-batch/`. Rows can show **Registered**, **Already registered**, **Needs manual** (captcha or risk control), or connection/install errors. Automation cannot solve captchas; those devices stay marked for manual completion.
 
 ## Star History
 
