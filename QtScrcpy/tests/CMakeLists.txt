@@ -9,3 +9,5 @@ function(qsc_add_test name)
 endfunction()
 
 qsc_add_test(tst_hostcheck)
+qsc_add_test(tst_import)
+set_tests_properties(tst_import PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)

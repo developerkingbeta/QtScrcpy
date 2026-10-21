@@ -240,15 +240,21 @@ endif()
 source_group(util FILES ${QC_UTIL_SOURCES})
 
 # batch
+add_subdirectory(batch/third_party/miniz)
+
 set(QC_BATCH_SOURCES
     batch/devicerow.h
     batch/hostcheck.h
     batch/hostcheck.cpp
+    batch/sheetreader.h
+    batch/sheetreader.cpp
+    batch/deviceimport.h
+    batch/deviceimport.cpp
 )
 source_group(batch FILES ${QC_BATCH_SOURCES})
 
 add_library(qsc_batch STATIC ${QC_BATCH_SOURCES})
-target_link_libraries(qsc_batch PUBLIC Qt${QT_DESIRED_VERSION}::Core)
+target_link_libraries(qsc_batch PUBLIC Qt${QT_DESIRED_VERSION}::Core qsc_miniz)
 target_include_directories(qsc_batch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/batch)
 
 # qrc
