@@ -2,12 +2,17 @@
 
 #include "miniz.h"
 
+#include <QBuffer>
 #include <QFile>
 #include <QFileInfo>
 #include <QMap>
 #include <QPair>
 #include <QTextStream>
 #include <QXmlStreamReader>
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QStringConverter>
+#endif
 
 namespace batch {
 
@@ -133,6 +138,20 @@ SheetTable parseWorksheet(const QByteArray &xml, const QStringList &sharedString
     return table;
 }
 
+bool worksheetUsesSharedStringCells(const QByteArray &xml)
+{
+    QXmlStreamReader reader(xml);
+    while (!reader.atEnd()) {
+        reader.readNext();
+        if (reader.isStartElement() && reader.name() == QLatin1String("c")) {
+            if (reader.attributes().value(QLatin1String("t")) == QLatin1String("s")) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 QByteArray extractZipEntry(const QString &zipPath, const char *entryName, QString *error)
 {
     mz_zip_archive zip;
@@ -164,14 +183,21 @@ QByteArray extractZipEntry(const QString &zipPath, const char *entryName, QStrin
 
 SheetTable readXlsx(const QString &path, QString *error)
 {
-    QString sharedErr;
-    const QByteArray sharedXml =
-        extractZipEntry(path, "xl/sharedStrings.xml", &sharedErr);
-    Q_UNUSED(sharedErr);
-
     const QByteArray sheetXml = extractZipEntry(path, "xl/worksheets/sheet1.xml", error);
     if (sheetXml.isEmpty()) {
         return SheetTable();
+    }
+
+    const bool needsSharedStrings = worksheetUsesSharedStringCells(sheetXml);
+    QByteArray sharedXml;
+    if (needsSharedStrings) {
+        sharedXml = extractZipEntry(path, "xl/sharedStrings.xml", error);
+        if (sharedXml.isEmpty()) {
+            return SheetTable();
+        }
+    } else {
+        QString ignoredErr;
+        sharedXml = extractZipEntry(path, "xl/sharedStrings.xml", &ignoredErr);
     }
 
     const QStringList sharedStrings = parseSharedStrings(sharedXml);
@@ -226,8 +252,14 @@ SheetTable readCsv(const QString &path, QString *error)
     }
 
     SheetTable table;
-    QTextStream stream(raw);
+    QBuffer buffer(&raw);
+    buffer.open(QIODevice::ReadOnly);
+    QTextStream stream(&buffer);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    stream.setEncoding(QStringConverter::Utf8);
+#else
     stream.setCodec("UTF-8");
+#endif
     while (!stream.atEnd()) {
         const QString line = stream.readLine();
         if (line.isEmpty() && stream.atEnd()) {
