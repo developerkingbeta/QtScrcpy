@@ -18,6 +18,8 @@ enum class ScreenKind {
     SignUpForm,
     CountryPicker,
     SmsVerify,
+    SmsResend,
+    AgreementTerms,
     AlreadyRegisteredMsg,
     CaptchaSecurity,
     RateLimited
@@ -38,8 +40,9 @@ static const char *const kPermissionVariants[] = {"Allow", "允许", "While usin
 static const char *const kWelcomeVariants[] = {"Register", "注册"};
 static const char *const kSignUpVariants[] = {"Next", "下一步"};
 static const char *const kCountryPickerVariants[] = {"Search", "搜索"};
-static const char *const kSmsVerifyVariants[] = {
-    "Resend", "重新发送", "Verification code", "验证码"};
+static const char *const kSmsVerifyVariants[] = {"Verification code", "验证码"};
+static const char *const kSmsResendVariants[] = {"Resend", "重新发送"};
+static const char *const kAgreementVariants[] = {"I agree", "同意协议"};
 static const char *const kAlreadyRegisteredVariants[] = {
     "already registered", "已注册", "already linked"};
 static const char *const kCaptchaVariants[] = {
@@ -54,7 +57,9 @@ const TextVariantRow kTextVariants[] = {
     {ScreenKind::WelcomeRegister, kWelcomeVariants, 2},
     {ScreenKind::SignUpForm, kSignUpVariants, 2},
     {ScreenKind::CountryPicker, kCountryPickerVariants, 2},
-    {ScreenKind::SmsVerify, kSmsVerifyVariants, 4},
+    {ScreenKind::SmsVerify, kSmsVerifyVariants, 2},
+    {ScreenKind::SmsResend, kSmsResendVariants, 2},
+    {ScreenKind::AgreementTerms, kAgreementVariants, 2},
     {ScreenKind::AlreadyRegisteredMsg, kAlreadyRegisteredVariants, 3},
     {ScreenKind::CaptchaSecurity, kCaptchaVariants, 6},
     {ScreenKind::RateLimited, kRateLimitedVariants, 4},
@@ -89,27 +94,28 @@ bool anyNodeMatches(const QList<UiNode> &nodes, ScreenKind kind)
 
 bool hasMainTabs(const QList<UiNode> &nodes)
 {
-    static const char *const kTabPairs[][2] = {
-        {"Chats", "微信"},
-        {"Contacts", "通讯录"},
-        {"Discover", "发现"},
-        {"Me", "我"},
-    };
-    for (size_t g = 0; g < sizeof(kTabPairs) / sizeof(kTabPairs[0]); ++g) {
-        bool found = false;
-        for (const UiNode &node : nodes) {
-            const QString t = node.text + node.desc;
-            if (t.contains(QString::fromUtf8(kTabPairs[g][0]), Qt::CaseInsensitive)
-                || t.contains(QString::fromUtf8(kTabPairs[g][1]), Qt::CaseInsensitive)) {
-                found = true;
-                break;
+    for (const TextVariantRow &row : kTextVariants) {
+        if (row.kind != ScreenKind::MainTabs) {
+            continue;
+        }
+        for (int i = 0; i + 1 < row.variantCount; i += 2) {
+            const QString en = QString::fromUtf8(row.variants[i]);
+            const QString zh = QString::fromUtf8(row.variants[i + 1]);
+            bool found = false;
+            for (const UiNode &node : nodes) {
+                const QString t = node.text + node.desc;
+                if (t.contains(en, Qt::CaseInsensitive) || t.contains(zh, Qt::CaseInsensitive)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
             }
         }
-        if (!found) {
-            return false;
-        }
+        return true;
     }
-    return true;
+    return false;
 }
 
 ScreenKind classify(const QList<UiNode> &nodes)
@@ -126,7 +132,8 @@ ScreenKind classify(const QList<UiNode> &nodes)
     if (hasMainTabs(nodes)) {
         return ScreenKind::MainTabs;
     }
-    if (anyNodeMatches(nodes, ScreenKind::SmsVerify)) {
+    if (anyNodeMatches(nodes, ScreenKind::SmsVerify)
+        || anyNodeMatches(nodes, ScreenKind::SmsResend)) {
         return ScreenKind::SmsVerify;
     }
     if (anyNodeMatches(nodes, ScreenKind::CountryPicker)) {
@@ -146,20 +153,6 @@ ScreenKind classify(const QList<UiNode> &nodes)
         return ScreenKind::PrivacyDialog;
     }
     return ScreenKind::Unknown;
-}
-
-QString variantsFor(ScreenKind kind)
-{
-    for (const TextVariantRow &row : kTextVariants) {
-        if (row.kind == kind) {
-            QStringList list;
-            for (int i = 0; i < row.variantCount; ++i) {
-                list << QString::fromUtf8(row.variants[i]);
-            }
-            return list.join(QLatin1Char('|'));
-        }
-    }
-    return QString();
 }
 
 QStringList variantListFor(ScreenKind kind)
@@ -251,29 +244,6 @@ QString nationalNumber(const QString &phone)
         return phone;
     }
     return phone.mid(dial.size());
-}
-
-bool containsAny(const QString &haystack, const QStringList &needles)
-{
-    for (const QString &needle : needles) {
-        if (haystack.contains(needle, Qt::CaseInsensitive)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool logContainsSecret(const QStringList &lines, const QString &secret)
-{
-    if (secret.isEmpty()) {
-        return false;
-    }
-    for (const QString &line : lines) {
-        if (line.contains(secret)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 } // namespace
@@ -514,10 +484,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
             }
             if (!agreementTicked) {
                 logStep(QStringLiteral("accept terms"));
-                const UiNode *agreeNode =
-                    UiDump::findAny(nodes,
-                                    {QStringLiteral("I agree"), QStringLiteral("同意协议")},
-                                    false);
+                const UiNode *agreeNode = findTapTarget(nodes, ScreenKind::AgreementTerms);
                 if (agreeNode) {
                     driver.tap(agreeNode->center().x(), agreeNode->center().y());
                     agreementTicked = true;
@@ -556,10 +523,7 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
                     if (smsWaitTimer.elapsed() > static_cast<qint64>(opts.smsTimeoutSec) * 1000) {
                         if (smsResendCount < opts.maxSmsResend) {
                             logStep(QStringLiteral("resend sms"));
-                            const UiNode *resend = UiDump::findAny(
-                                nodes,
-                                {QStringLiteral("Resend"), QStringLiteral("重新发送")},
-                                false);
+                            const UiNode *resend = findTapTarget(nodes, ScreenKind::SmsResend);
                             if (resend) {
                                 driver.tap(resend->center().x(), resend->center().y());
                             }
@@ -604,10 +568,6 @@ RegisterOutcome WechatRegistrar::run(const DeviceRow &row,
         outcome.state = RegState::Failed;
         outcome.detail = QStringLiteral("registration stalled");
     }
-
-    Q_UNUSED(variantsFor);
-    Q_UNUSED(containsAny);
-    Q_UNUSED(logContainsSecret);
 
     return outcome;
 }
