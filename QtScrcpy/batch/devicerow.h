@@ -1,6 +1,8 @@
 #ifndef BATCH_DEVICEROW_H
 #define BATCH_DEVICEROW_H
 
+#include <QMetaType>
+#include <QMetaType>
 #include <QString>
 #include <QtGlobal>
 
@@ -52,5 +54,7 @@ struct DeviceRow {
 };
 
 } // namespace batch
+
+Q_DECLARE_METATYPE(batch::DeviceRow)
 
 #endif // BATCH_DEVICEROW_H

@@ -266,11 +266,15 @@ set(QC_BATCH_SOURCES
     batch/wechatregistrar.cpp
     batch/adbuidriver.h
     batch/adbuidriver.cpp
+    batch/batchmodel.h
+    batch/batchmodel.cpp
+    batch/batchcontroller.h
+    batch/batchcontroller.cpp
 )
 source_group(batch FILES ${QC_BATCH_SOURCES})
 
 add_library(qsc_batch STATIC ${QC_BATCH_SOURCES})
-target_link_libraries(qsc_batch PUBLIC Qt${QT_DESIRED_VERSION}::Core qsc_miniz)
+target_link_libraries(qsc_batch PUBLIC Qt${QT_DESIRED_VERSION}::Core Qt${QT_DESIRED_VERSION}::Widgets qsc_miniz)
 target_include_directories(qsc_batch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/batch)
 
 # qrc
