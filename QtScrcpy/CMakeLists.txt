@@ -245,6 +245,8 @@ add_subdirectory(batch/third_party/miniz)
 set(QC_BATCH_SOURCES
     batch/adbrunner.h
     batch/adbrunner.cpp
+    batch/batchsettings.h
+    batch/batchsettings.cpp
     batch/deviceprobe.h
     batch/deviceprobe.cpp
     batch/devicerow.h
@@ -254,6 +256,8 @@ set(QC_BATCH_SOURCES
     batch/sheetreader.cpp
     batch/deviceimport.h
     batch/deviceimport.cpp
+    batch/registrationstore.h
+    batch/registrationstore.cpp
 )
 source_group(batch FILES ${QC_BATCH_SOURCES})
 
