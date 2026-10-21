@@ -93,6 +93,14 @@ private slots:
         QCOMPARE(code, QStringLiteral("482913"));
     }
 
+    void codeExtractedFromParenthesesWechatMessage()
+    {
+        const QList<batch::SmsMessage> msgs =
+            batch::SmsReader::parseContentQuery(readFixture("sms_wechat_paren.txt"));
+        const QString code = batch::SmsReader::extractWechatCode(msgs, 1697881000000);
+        QCOMPARE(code, QStringLiteral("482913"));
+    }
+
     void chineseMessageExtracted()
     {
         const QList<batch::SmsMessage> msgs =

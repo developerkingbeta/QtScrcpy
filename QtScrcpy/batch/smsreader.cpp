@@ -31,11 +31,11 @@ QString extractCodeFromText(const QString &text)
     if (!wechatKeywordRe().match(text).hasMatch()) {
         return QString();
     }
-    const QRegularExpressionMatch match = sixDigitCodeRe().match(text);
-    if (!match.hasMatch()) {
+    QRegularExpressionMatchIterator it = sixDigitCodeRe().globalMatch(text);
+    if (!it.hasNext()) {
         return QString();
     }
-    return match.captured(1);
+    return it.next().captured(1);
 }
 
 } // namespace

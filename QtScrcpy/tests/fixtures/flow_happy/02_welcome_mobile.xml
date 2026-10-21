@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Sign up via Mobile" class="android.widget.TextView" bounds="[234,1266][486,1308]" clickable="true" enabled="true"/>
+  <node text="Sign up via  Facebook " class="android.widget.TextView" bounds="[205,1368][514,1410]" clickable="true" enabled="true"/>
+  <node text="Cancel" class="android.widget.TextView" bounds="[0,1455][720,1507]" clickable="true" enabled="true"/>
+</hierarchy>

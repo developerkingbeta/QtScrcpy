@@ -1,0 +1,3 @@
+Row: 0 address=WeChat, body=[WeChat] (000000) Code to be used once for WeChat login security verification. Don't share code with others., date=1707806744447
+Row: 1 address=WeChat, body=WeChat verification code (000000) may only be used once to verify mobile number., date=1658571457845
+Row: 2 address=Other, body=Unrelated carrier promo without WeChat keyword, date=1792594254400

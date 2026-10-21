@@ -37,12 +37,14 @@ static const char *const kMainTabsVariants[] = {
     "Chats", "微信", "Contacts", "通讯录", "Discover", "发现", "Me", "我"};
 static const char *const kPrivacyVariants[] = {"Agree", "同意"};
 static const char *const kPermissionVariants[] = {"Allow", "允许", "While using the app"};
-static const char *const kWelcomeVariants[] = {"Register", "注册"};
-static const char *const kSignUpVariants[] = {"Next", "下一步"};
+static const char *const kWelcomeVariants[] = {
+    "Sign up via Mobile", "Sign Up", "Register", "注册"};
+static const char *const kSignUpVariants[] = {"Accept and Continue", "Next", "下一步"};
 static const char *const kCountryPickerVariants[] = {"Search", "搜索"};
 static const char *const kSmsVerifyVariants[] = {"Verification code", "验证码"};
 static const char *const kSmsResendVariants[] = {"Resend", "重新发送"};
-static const char *const kAgreementVariants[] = {"I agree", "同意协议"};
+static const char *const kAgreementVariants[] = {
+    "I have read and accept", "I agree", "同意协议", "Terms of Service"};
 static const char *const kAlreadyRegisteredVariants[] = {
     "already registered", "已注册", "already linked"};
 static const char *const kCaptchaVariants[] = {
@@ -54,12 +56,12 @@ const TextVariantRow kTextVariants[] = {
     {ScreenKind::MainTabs, kMainTabsVariants, 8},
     {ScreenKind::PrivacyDialog, kPrivacyVariants, 2},
     {ScreenKind::PermissionDialog, kPermissionVariants, 3},
-    {ScreenKind::WelcomeRegister, kWelcomeVariants, 2},
-    {ScreenKind::SignUpForm, kSignUpVariants, 2},
+    {ScreenKind::WelcomeRegister, kWelcomeVariants, 4},
+    {ScreenKind::SignUpForm, kSignUpVariants, 3},
     {ScreenKind::CountryPicker, kCountryPickerVariants, 2},
     {ScreenKind::SmsVerify, kSmsVerifyVariants, 2},
     {ScreenKind::SmsResend, kSmsResendVariants, 2},
-    {ScreenKind::AgreementTerms, kAgreementVariants, 2},
+    {ScreenKind::AgreementTerms, kAgreementVariants, 4},
     {ScreenKind::AlreadyRegisteredMsg, kAlreadyRegisteredVariants, 3},
     {ScreenKind::CaptchaSecurity, kCaptchaVariants, 6},
     {ScreenKind::RateLimited, kRateLimitedVariants, 4},

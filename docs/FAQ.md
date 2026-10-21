@@ -22,6 +22,29 @@ adb server version (41) doesn't match this client (39); killing...
 
 ![image](image/USB调试(安全设置).jpg)
 
+# WeChat batch registration (QtScrcpy batch dialog)
+
+## Device and network requirements
+
+- Batch registration expects **ADB over Tailscale** (`100.x.x.x:5555`). Public IPs in the sheet are rejected by design.
+- The summary shows **“N of M connected”**; Install/Register only run on rows that passed the connection check. Unreachable devices receive no commands.
+
+## SMS auto-read
+
+- On **Redmi 220333QAG (MIUI/HyperOS V14, Android 13)** with USB debugging, `adb shell content query --uri content://sms/inbox --projection address:body:date --sort "date DESC"` **works** (no permission denial observed). WeChat codes in `[WeChat] (123456)` and `verification code (123456)` formats are parsed.
+- If `content query` fails on your ROM, the registrar falls back to **`dumpsys notification`**. If neither yields a code, automatic SMS read is unsupported on that ROM — register manually or use a device where inbox query works.
+
+## UI automation (uiautomator) on MIUI / XSpace
+
+- **WeChat 8.0.66** on this hardware was installed in **MIUI XSpace (user 999)**. `uiautomator dump` from the owner profile often captures the **launcher**, not the XSpace window. For calibration, install the same APK on the owner profile without uninstalling XSpace: `adb shell cmd package install-existing --user 0 com.tencent.mm`, then `adb shell am force-stop --user 999 com.tencent.mm` and launch with `adb shell am start --user 0 -n com.tencent.mm/.ui.LauncherUI`.
+- On the welcome splash, dumps sometimes fail with **“could not get idle state”** or return an empty `FrameLayout` until the sign-up sheet or form is open. Prefer capturing XML on **Sign up via Mobile**, the phone form, and SMS screens.
+- English WeChat 8.0.66 uses **Sign Up → Sign up via Mobile → Accept and Continue** (not “Register” / “Next”). Captcha / slider screens are marked **Needs manual**; the batch continues.
+
+## Limits verified in Task 10
+
+- **Two-device sheet E2E** (one SIM + one deliberately unreachable Tailscale host) was **not run**: only one USB device (`9257142`) was available and no `100.x` Tailscale address was observed on it.
+- Do not use **`pm clear`** on WeChat; logged-in devices are reported as **Already registered**.
+
 # 其它
 ## 支持声音（软件不做支持）
 [关于转发安卓声音到PC的讨论](https://github.com/Genymobile/scrcpy/issues/14#issuecomment-543204526)
