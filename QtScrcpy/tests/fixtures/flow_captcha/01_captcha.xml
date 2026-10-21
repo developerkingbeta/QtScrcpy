@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Security Verification" class="android.widget.TextView" bounds="[0,100][400,200]" clickable="false" enabled="true"/>
+  <node text="Drag the puzzle" class="android.widget.TextView" bounds="[0,300][400,400]" clickable="false" enabled="true"/>
+</hierarchy>

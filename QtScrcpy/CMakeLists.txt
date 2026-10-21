@@ -262,6 +262,10 @@ set(QC_BATCH_SOURCES
     batch/smsreader.cpp
     batch/uidump.h
     batch/uidump.cpp
+    batch/wechatregistrar.h
+    batch/wechatregistrar.cpp
+    batch/adbuidriver.h
+    batch/adbuidriver.cpp
 )
 source_group(batch FILES ${QC_BATCH_SOURCES})
 

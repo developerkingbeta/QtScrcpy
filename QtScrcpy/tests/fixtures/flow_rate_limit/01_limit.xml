@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Too frequent, try again later" class="android.widget.TextView" bounds="[0,200][400,300]" clickable="false" enabled="true"/>
+</hierarchy>

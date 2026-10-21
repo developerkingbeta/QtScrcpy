@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Agree" class="android.widget.Button" bounds="[100,400][300,500]" clickable="true" enabled="true"/>
+</hierarchy>

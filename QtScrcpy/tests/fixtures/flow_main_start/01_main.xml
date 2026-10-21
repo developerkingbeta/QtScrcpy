@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Chats" class="android.widget.TextView" bounds="[0,900][100,980]" clickable="true" enabled="true"/>
+  <node text="Contacts" class="android.widget.TextView" bounds="[100,900][200,980]" clickable="true" enabled="true"/>
+  <node text="Discover" class="android.widget.TextView" bounds="[200,900][300,980]" clickable="true" enabled="true"/>
+  <node text="Me" class="android.widget.TextView" bounds="[300,900][400,980]" clickable="true" enabled="true"/>
+</hierarchy>

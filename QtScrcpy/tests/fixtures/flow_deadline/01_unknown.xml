@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
+<hierarchy rotation="0">
+  <node text="Loading" class="android.widget.TextView" bounds="[0,0][100,50]" clickable="false" enabled="true"/>
+</hierarchy>
