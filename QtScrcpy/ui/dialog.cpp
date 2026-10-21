@@ -32,6 +32,7 @@
 
 #include "config.h"
 #include "dialog.h"
+#include "hostcheck.h"
 #include "ui_dialog.h"
 #include "videoform.h"
 #include "../groupcontroller/groupcontroller.h"
@@ -722,6 +723,11 @@ void Dialog::delayMs(int ms)
     while (QTime::currentTime() < dieTime) {
         QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
     }
+}
+
+bool Dialog::isPublicRoutableIPv4(const QString &host)
+{
+    return batch::HostCheck::isPublicRoutableIPv4(host);
 }
 
 QString Dialog::getGameScript(const QString &fileName)

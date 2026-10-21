@@ -15,7 +15,7 @@ file(STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/appversion QC_FILE_VERSION)
 set(QC_PROJECT_VERSION ${QC_FILE_VERSION})
 
 # Project declare
-project(${QC_PROJECT_NAME} VERSION ${QC_PROJECT_VERSION} LANGUAGES CXX)
+project(${QC_PROJECT_NAME} VERSION ${QC_PROJECT_VERSION} LANGUAGES CXX C)
 message(STATUS "[${PROJECT_NAME}] Project ${PROJECT_NAME} ${PROJECT_VERSION}")
 
 # QC define
@@ -51,6 +51,8 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 message(STATUS "[${PROJECT_NAME}] BUILD_TYPE:${CMAKE_BUILD_TYPE}")
+
+option(QSC_BUILD_TESTS "Build Qt Test targets under QtScrcpy/tests" OFF)
 
 # Log configuration
 option(ENABLE_DETAILED_LOGS "Enable detailed log output with file and line info" OFF)
@@ -237,6 +239,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 source_group(util FILES ${QC_UTIL_SOURCES})
 
+# batch
+set(QC_BATCH_SOURCES
+    batch/devicerow.h
+    batch/hostcheck.h
+    batch/hostcheck.cpp
+)
+source_group(batch FILES ${QC_BATCH_SOURCES})
+
+add_library(qsc_batch STATIC ${QC_BATCH_SOURCES})
+target_link_libraries(qsc_batch PUBLIC Qt${QT_DESIRED_VERSION}::Core)
+target_include_directories(qsc_batch PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/batch)
+
 # qrc
 set(QC_QRC_SOURCES "res/res.qrc")
 
@@ -305,6 +319,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE util)
 target_include_directories(${PROJECT_NAME} PRIVATE uibase)
 target_include_directories(${PROJECT_NAME} PRIVATE ui)
 target_include_directories(${PROJECT_NAME} PRIVATE render)
+target_include_directories(${PROJECT_NAME} PRIVATE batch)
 
 # output dir
 # https://cmake.org/cmake/help/latest/prop_gbl/GENERATOR_IS_MULTI_CONFIG.html
@@ -410,4 +425,11 @@ add_subdirectory(QtScrcpyCore)
 target_link_libraries(${PROJECT_NAME} PRIVATE
     ${LINK_LIBS}
     QtScrcpyCore
+    qsc_batch
 )
+
+if(QSC_BUILD_TESTS)
+    find_package(Qt${QT_DESIRED_VERSION} REQUIRED COMPONENTS Test)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

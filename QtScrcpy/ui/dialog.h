@@ -110,6 +110,7 @@ private:
 
     void showPortEditMenu(const QPoint &pos);
     void syncPresetLevelToUi();
+    static bool isPublicRoutableIPv4(const QString &host);
 
 protected:
     void closeEvent(QCloseEvent *event);
