@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+# Requires bash for process substitution used during ad-hoc codesign cleanup.
+
 echo
 echo
 echo ---------------------------------------------------------------

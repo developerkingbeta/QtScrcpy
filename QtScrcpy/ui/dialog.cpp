@@ -10,10 +10,13 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QAbstractSocket>
+#include <QHostAddress>
 #include <QGuiApplication>
 #include <QKeyEvent>
 #include <QComboBox>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QRegularExpression>
@@ -143,7 +146,12 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
             break;
         case qsc::AdbProcess::AER_ERROR_EXEC:
             //log = m_adb.getErrorOut();
-            if (args.contains("ifconfig") && args.contains("wlan0")) {
+            if (args.contains("route") && args.contains("get")) {
+                // Fallback: classic ifconfig wlan0, then ip -o a
+                QStringList adbArgs;
+                adbArgs << "shell" << "ifconfig" << "wlan0";
+                m_adb.execute(ui->serialBox->currentText().trimmed(), adbArgs);
+            } else if (args.contains("ifconfig") && args.contains("wlan0")) {
                 getIPbyIp();
             }
             break;
@@ -174,13 +182,20 @@ Dialog::Dialog(QWidget *parent) : QWidget(parent), ui(new Ui::Widget)
                     break;
                 }
                 ui->deviceIpEdt->setEditText(ip);
-            } else if (args.contains("ip -o a")) {
+            } else if (args.contains("ip") && (args.contains("-o") || args.contains("route"))) {
                 QString ip = m_adb.getDeviceIPByIpFromStdOut();
+                if (ip.isEmpty() && args.contains("route")) {
+                    QStringList adbArgs;
+                    adbArgs << "shell" << "ifconfig" << "wlan0";
+                    m_adb.execute(ui->serialBox->currentText().trimmed(), adbArgs);
+                    break;
+                }
                 if (ip.isEmpty()) {
                     log = "ip not find, connect to wifi?";
                     break;
                 }
                 ui->deviceIpEdt->setEditText(ip);
+                log = QString("device ip: %1").arg(ip);
             }
             break;
         }
@@ -724,6 +739,151 @@ void Dialog::delayMs(int ms)
     }
 }
 
+bool Dialog::waitAdbIdle(int timeoutMs)
+{
+    QTime dieTime = QTime::currentTime().addMSecs(timeoutMs);
+    while (m_adb.isRuning() && QTime::currentTime() < dieTime) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    return !m_adb.isRuning();
+}
+
+bool Dialog::isNetworkSerial(const QString &serial)
+{
+    // adb network serials are host:port (IPv4, IPv6 in brackets, or hostname)
+    const int colon = serial.lastIndexOf(QLatin1Char(':'));
+    if (colon <= 0 || colon >= serial.size() - 1) {
+        return false;
+    }
+    bool ok = false;
+    const int port = serial.mid(colon + 1).toInt(&ok);
+    return ok && port >= 1 && port <= 65535;
+}
+
+bool Dialog::isPublicRoutableIPv4(const QString &host)
+{
+    const QHostAddress addr(host);
+    if (addr.protocol() != QAbstractSocket::IPv4Protocol) {
+        return false;
+    }
+    const quint32 ip = addr.toIPv4Address();
+    // 10.0.0.0/8
+    if ((ip & 0xFF000000u) == 0x0A000000u) {
+        return false;
+    }
+    // 172.16.0.0/12
+    if ((ip & 0xFFF00000u) == 0xAC100000u) {
+        return false;
+    }
+    // 192.168.0.0/16
+    if ((ip & 0xFFFF0000u) == 0xC0A80000u) {
+        return false;
+    }
+    // 127.0.0.0/8
+    if ((ip & 0xFF000000u) == 0x7F000000u) {
+        return false;
+    }
+    // 100.64.0.0/10 (CGNAT / Tailscale)
+    if ((ip & 0xFFC00000u) == 0x64400000u) {
+        return false;
+    }
+    // 169.254.0.0/16 link-local
+    if ((ip & 0xFFFF0000u) == 0xA9FE0000u) {
+        return false;
+    }
+    return true;
+}
+
+void Dialog::warnIfInsecureWirelessTarget(const QString &host)
+{
+    if (!isPublicRoutableIPv4(host)) {
+        return;
+    }
+    outLog(tr("warning: connecting ADB to public IP %1 is insecure; prefer VPN (e.g. Tailscale)").arg(host), true);
+    QMessageBox::warning(
+        this,
+        tr("Insecure ADB target"),
+        tr("You are connecting ADB to a public IP (%1).\n\n"
+           "ADB has no transport encryption. Prefer a VPN (Tailscale, WireGuard) "
+           "or SSH tunnel instead of exposing port 5555 on the internet.")
+            .arg(host));
+}
+
+QString Dialog::resolveWirelessAddress(QString *errorMessage) const
+{
+    QString hostField = ui->deviceIpEdt->currentText().trimmed();
+    if (hostField.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = tr("error: device host/IP is empty");
+        }
+        return QString();
+    }
+
+    QString host;
+    QString port;
+
+    // Allow pasting host:port (or [ipv6]:port) into the host field.
+    if (hostField.startsWith(QLatin1Char('['))) {
+        const int closeBracket = hostField.indexOf(QLatin1Char(']'));
+        if (closeBracket > 1) {
+            host = hostField.mid(1, closeBracket - 1);
+            if (hostField.size() > closeBracket + 1 && hostField.at(closeBracket + 1) == QLatin1Char(':')) {
+                port = hostField.mid(closeBracket + 2).trimmed();
+            }
+        } else {
+            host = hostField;
+        }
+    } else {
+        // IPv4 or hostname with optional :port (exactly one colon). Bare IPv6 needs [addr]:port.
+        if (hostField.count(QLatin1Char(':')) == 1) {
+            const int colon = hostField.indexOf(QLatin1Char(':'));
+            const QString maybePort = hostField.mid(colon + 1).trimmed();
+            bool ok = false;
+            const int portNum = maybePort.toInt(&ok);
+            if (ok && portNum >= 1 && portNum <= 65535) {
+                host = hostField.left(colon).trimmed();
+                port = maybePort;
+            } else {
+                host = hostField;
+            }
+        } else {
+            host = hostField;
+        }
+    }
+
+    if (host.isEmpty()) {
+        if (errorMessage) {
+            *errorMessage = tr("error: device host/IP is empty");
+        }
+        return QString();
+    }
+
+    if (port.isEmpty()) {
+        port = ui->devicePortEdt->currentText().trimmed();
+    }
+    if (port.isEmpty() && ui->devicePortEdt->lineEdit()) {
+        port = ui->devicePortEdt->lineEdit()->placeholderText().trimmed();
+    }
+    if (port.isEmpty()) {
+        port = QStringLiteral("5555");
+    }
+
+    bool portOk = false;
+    const int portNum = port.toInt(&portOk);
+    if (!portOk || portNum < 1 || portNum > 65535) {
+        if (errorMessage) {
+            *errorMessage = tr("error: invalid device port");
+        }
+        return QString();
+    }
+
+    if (host.contains(QLatin1Char(':')) && !host.startsWith(QLatin1Char('['))) {
+        // IPv6 literal without brackets
+        return QStringLiteral("[%1]:%2").arg(host, QString::number(portNum));
+    }
+    return host + QLatin1Char(':') + QString::number(portNum);
+}
+
 QString Dialog::getGameScript(const QString &fileName)
 {
     if (fileName.isEmpty()) {
@@ -1133,36 +1293,31 @@ void Dialog::on_wirelessConnectBtn_clicked()
     if (checkAdbRun()) {
         return;
     }
-    QString addr = ui->deviceIpEdt->currentText().trimmed();
+    QString error;
+    const QString addr = resolveWirelessAddress(&error);
     if (addr.isEmpty()) {
-        outLog("error: device ip is null", false);
+        outLog(error.isEmpty() ? tr("error: invalid wireless address") : error, false);
         return;
     }
 
-    if (!ui->devicePortEdt->currentText().isEmpty()) {
-        addr += ":";
-        addr += ui->devicePortEdt->currentText().trimmed();
-    } else if (!ui->devicePortEdt->lineEdit()->placeholderText().isEmpty()) {
-        addr += ":";
-        addr += ui->devicePortEdt->lineEdit()->placeholderText().trimmed();
-    } else {
-        outLog("error: device port is null", false);
-        return;
+    const int colon = addr.lastIndexOf(QLatin1Char(':'));
+    const QString host = addr.left(colon);
+    const QString port = addr.mid(colon + 1);
+    // History stores host without brackets for IPv6 display convenience
+    QString historyHost = host;
+    if (historyHost.startsWith(QLatin1Char('[')) && historyHost.endsWith(QLatin1Char(']'))) {
+        historyHost = historyHost.mid(1, historyHost.size() - 2);
     }
-
-    // 保存IP历史记录 - 只保存IP部分,不包含端口
-    QString ip = addr.split(":").first();
-    if (!ip.isEmpty()) {
-        saveIpHistory(ip);
+    if (!historyHost.isEmpty()) {
+        saveIpHistory(historyHost);
     }
-    
-    // 保存端口历史记录
-    QString port = addr.split(":").last();
-    if (!port.isEmpty() && port != ip) {
+    if (!port.isEmpty()) {
         savePortHistory(port);
     }
 
-    outLog("wireless connect...", false);
+    warnIfInsecureWirelessTarget(historyHost);
+
+    outLog(tr("wireless connect %1...").arg(addr), false);
     QStringList adbArgs;
     adbArgs << "connect";
     adbArgs << addr;
@@ -1174,11 +1329,23 @@ void Dialog::on_startAdbdBtn_clicked()
     if (checkAdbRun()) {
         return;
     }
-    outLog("start devices adbd...", false);
-    // adb tcpip 5555
+    QString port = ui->devicePortEdt->currentText().trimmed();
+    if (port.isEmpty() && ui->devicePortEdt->lineEdit()) {
+        port = ui->devicePortEdt->lineEdit()->placeholderText().trimmed();
+    }
+    if (port.isEmpty()) {
+        port = QStringLiteral("5555");
+    }
+    bool ok = false;
+    const int portNum = port.toInt(&ok);
+    if (!ok || portNum < 1 || portNum > 65535) {
+        outLog(tr("error: invalid device port for adbd"), false);
+        return;
+    }
+    outLog(tr("start devices adbd on port %1...").arg(portNum), false);
     QStringList adbArgs;
     adbArgs << "tcpip";
-    adbArgs << "5555";
+    adbArgs << QString::number(portNum);
     m_adb.execute(ui->serialBox->currentText().trimmed(), adbArgs);
 }
 
@@ -1219,25 +1386,17 @@ void Dialog::on_getIPBtn_clicked()
         return;
     }
 
+    const QString serial = ui->serialBox->currentText().trimmed();
+    if (serial.isEmpty()) {
+        outLog(tr("error: no device selected"), false);
+        return;
+    }
+
     outLog("get ip...", false);
-    // adb -s P7C0218510000537 shell ifconfig wlan0
-    // or
-    // adb -s P7C0218510000537 shell ip -f inet addr show wlan0
+    // Prefer default-route source IP (works across wlan0/wlan1 and skips cellular CGNAT).
     QStringList adbArgs;
-#if 0
-    adbArgs << "shell";
-    adbArgs << "ip";
-    adbArgs << "-f";
-    adbArgs << "inet";
-    adbArgs << "addr";
-    adbArgs << "show";
-    adbArgs << "wlan0";
-#else
-    adbArgs << "shell";
-    adbArgs << "ifconfig";
-    adbArgs << "wlan0";
-#endif
-    m_adb.execute(ui->serialBox->currentText().trimmed(), adbArgs);
+    adbArgs << "shell" << "ip" << "route" << "get" << "1.1.1.1";
+    m_adb.execute(serial, adbArgs);
 }
 
 void Dialog::getIPbyIp()
@@ -1247,8 +1406,7 @@ void Dialog::getIPbyIp()
     }
 
     QStringList adbArgs;
-    adbArgs << "shell";
-    adbArgs << "ip -o a";
+    adbArgs << "shell" << "ip" << "-o" << "a";
 
     m_adb.execute(ui->serialBox->currentText().trimmed(), adbArgs);
 }
@@ -1322,8 +1480,13 @@ void Dialog::on_wirelessDisConnectBtn_clicked()
     if (checkAdbRun()) {
         return;
     }
-    QString addr = ui->deviceIpEdt->currentText().trimmed();
-    outLog("wireless disconnect...", false);
+    QString error;
+    const QString addr = resolveWirelessAddress(&error);
+    if (addr.isEmpty()) {
+        outLog(error.isEmpty() ? tr("error: invalid wireless address") : error, false);
+        return;
+    }
+    outLog(tr("wireless disconnect %1...").arg(addr), false);
     QStringList adbArgs;
     adbArgs << "disconnect";
     adbArgs << addr;
@@ -1429,19 +1592,9 @@ void Dialog::on_usbConnectBtn_clicked()
 
 int Dialog::findDeviceFromeSerialBox(bool wifi)
 {
-    QString regStr = "\\b(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\:([0-9]|[1-9]\\d|[1-9]\\d{2}|[1-9]\\d{3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])\\b";
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-    QRegExp regIP(regStr);
-#else
-    QRegularExpression regIP(regStr);
-#endif
     for (int i = 0; i < ui->serialBox->count(); ++i) {
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-        bool isWifi = regIP.exactMatch(ui->serialBox->itemText(i));
-#else
-        bool isWifi = regIP.match(ui->serialBox->itemText(i)).hasMatch();
-#endif
-        bool found = wifi ? isWifi : !isWifi;
+        const bool isWifi = isNetworkSerial(ui->serialBox->itemText(i));
+        const bool found = wifi ? isWifi : !isWifi;
         if (found) {
             return i;
         }
@@ -1456,29 +1609,58 @@ void Dialog::on_wifiConnectBtn_clicked()
     delayMs(200);
 
     on_updateDevice_clicked();
-    delayMs(200);
+    if (!waitAdbIdle(5000)) {
+        outLog(tr("wifi connect aborted: adb still busy"), true);
+        return;
+    }
 
     int firstUsbDevice = findDeviceFromeSerialBox(false);
     if (-1 == firstUsbDevice) {
-        qWarning() << "No use device is found!";
+        outLog(tr("No USB device is found!"), true);
+        qWarning() << "No USB device is found!";
         return;
     }
     ui->serialBox->setCurrentIndex(firstUsbDevice);
 
     on_getIPBtn_clicked();
-    delayMs(200);
+    if (!waitAdbIdle(8000)) {
+        outLog(tr("wifi connect aborted: get IP timed out"), true);
+        return;
+    }
+    if (ui->deviceIpEdt->currentText().trimmed().isEmpty()) {
+        // Fallback path used when route-get fails (handler may already have chained getIPbyIp)
+        getIPbyIp();
+        waitAdbIdle(8000);
+    }
+    if (ui->deviceIpEdt->currentText().trimmed().isEmpty()) {
+        outLog(tr("wifi connect aborted: could not detect device IP (is Wi-Fi on?)"), true);
+        return;
+    }
 
     on_startAdbdBtn_clicked();
-    delayMs(1000);
+    if (!waitAdbIdle(8000)) {
+        outLog(tr("wifi connect aborted: start adbd timed out"), true);
+        return;
+    }
+    // adbd restarts into TCP mode; give USB enumeration a moment to settle.
+    delayMs(500);
 
     on_wirelessConnectBtn_clicked();
-    delayMs(2000);
+    if (!waitAdbIdle(10000)) {
+        outLog(tr("wifi connect aborted: adb connect timed out"), true);
+        return;
+    }
+    delayMs(500);
 
     on_updateDevice_clicked();
-    delayMs(200);
+    if (!waitAdbIdle(5000)) {
+        outLog(tr("wifi connect aborted: refresh devices timed out"), true);
+        return;
+    }
 
     int firstWifiDevice = findDeviceFromeSerialBox(true);
     if (-1 == firstWifiDevice) {
+        outLog(tr("No wifi device is found! Check host/port, same LAN/VPN, and that adbd is in TCP mode."), true);
         qWarning() << "No wifi device is found!";
         return;
     }
@@ -1588,8 +1770,8 @@ void Dialog::loadIpHistory()
     if (ui->deviceIpEdt->lineEdit()) {
         ui->deviceIpEdt->lineEdit()->setFrame(false);
         ui->deviceIpEdt->lineEdit()->setTextMargins(0, 0, 0, 0);
-        ui->deviceIpEdt->lineEdit()->setMaxLength(128);
-        ui->deviceIpEdt->lineEdit()->setPlaceholderText("192.168.0.1");
+        ui->deviceIpEdt->lineEdit()->setMaxLength(255);
+        ui->deviceIpEdt->lineEdit()->setPlaceholderText(QStringLiteral("IP / host[:port]"));
     }
 }
 

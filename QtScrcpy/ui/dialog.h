@@ -41,6 +41,14 @@ public:
     // show the main window (e.g. when hidden in the tray) and give it focus
     void bringToFront();
 
+private:
+    // Build host:port for adb connect/disconnect; accepts host, IP, or host:port in the IP field.
+    QString resolveWirelessAddress(QString *errorMessage = nullptr) const;
+    bool waitAdbIdle(int timeoutMs);
+    static bool isNetworkSerial(const QString &serial);
+    static bool isPublicRoutableIPv4(const QString &host);
+    void warnIfInsecureWirelessTarget(const QString &host);
+
 private slots:
     void onDeviceConnected(bool success, const QString& serial, const QString& deviceName, const QSize& size);
     void onDeviceDisconnected(QString serial);

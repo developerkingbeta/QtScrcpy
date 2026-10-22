@@ -168,16 +168,19 @@ or you can [build it yourself](#Build) (not recommended, get it in Actions if yo
 ## Run
 Connect to your Android device on your computer, then run the program and click `USB connect` or `WiFi connect`
 
-### Wireless connection steps (ensure that the mobile phone and PC are on the same LAN):
+### Wireless connection steps (same LAN, or a VPN such as Tailscale):
 1. Enable USB debugging in developer options on the Android device
 2. Connect the Android device to the computer via USB
 3. Click update device, and you will see that the device number is updated
-4. Click get device IP
+4. Click get device IP (or type a host/IP; `host:port` in the host field is OK)
 5. Click start adbd
 6. Click wireless connect
 7. Click update device again, and another device with an IP address will be found. Select this device.
 8. Click start service
 
+One-click **WiFi connect** runs the same flow automatically (USB required once to enable TCP mode).
+
+**Remote / public IP:** You can enter a public IP, hostname, or VPN address in the Wireless host field (optional port, default `5555`). Exposing ADB (`tcpip 5555`) on the public internet is insecure — use a VPN (e.g. Tailscale) or an SSH tunnel instead of port-forwarding ADB. NAT and carrier firewalls often block inbound public-IP ADB even when the address is correct.
 
 Note: it is not necessary to keep your Android device connected via USB after you start adbd.
 
